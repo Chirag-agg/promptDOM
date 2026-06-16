@@ -1,0 +1,22 @@
+[
+  {
+    "prompt": "hide comments",
+    "expected_action": "hide",
+    "expected_targets": ["comments"]
+  },
+  {
+    "prompt": "highlight sidebar",
+    "expected_action": "highlight",
+    "expected_targets": ["sidebar"]
+  },
+  {
+    "prompt": "remove shorts and comments",
+    "expected_action": "hide",
+    "expected_targets": ["youtube_shorts", "comments"]
+  },
+  {
+    "prompt": "hide unicorn section",
+    "expected_action": "hide",
+    "expected_targets": ["unknown"]
+  }
+]
