@@ -1,0 +1,3 @@
+"""
+PromptDOM package.
+"""
