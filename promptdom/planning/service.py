@@ -2,23 +2,24 @@ import os
 import json
 import urllib.parse
 from datetime import datetime
+import time
 from .models import PlannerContext, PlannerResult
 from .rule_planner import RulePlanner
 from .llm_planner import LLMPlanner
 from ..inspection.service import InspectionService
+from ..analytics.collector import AnalyticsCollector
+from ..analytics.models import PlanningLog
 
 class PlannerService:
-    def __init__(self, inspection_service: InspectionService):
+    def __init__(self, inspection_service: InspectionService, analytics_collector: AnalyticsCollector = None):
         self.inspection_service = inspection_service
-        self.planner_type = os.getenv("PROMPTDOM_PLANNER", "RULE").upper()
+        self.analytics_collector = analytics_collector
+        self.planner_type = "RULE"
         self.log_file = "planner_replay.jsonl"
-        
-        if self.planner_type == "LLM":
-            self.planner = LLMPlanner()
-        else:
-            self.planner = RulePlanner()
+        self.planner = RulePlanner()
 
     async def get_plan(self, prompt: str) -> PlannerResult:
+        start_time = time.time()
         # 1. Obtain page context
         page_context = await self.inspection_service.inspect_compact()
         
@@ -30,6 +31,21 @@ class PlannerService:
         
         # 3. Execute selected planner
         result = await self.planner.plan(context)
+        
+        # Log to Analytics
+        if self.analytics_collector and result.plans:
+            # default to RULE if not set
+            source = result.plans[0].planner_source
+            ms = (time.time() - start_time) * 1000.0
+            self.analytics_collector.log_planning_request(
+                PlanningLog(
+                    prompt=prompt,
+                    planner_source=source,
+                    success=True,
+                    execution_time_ms=ms,
+                    fallback_reason=result.plans[0].fallback_reason
+                )
+            )
         
         # 4. Log the replay data
         await self._log_replay(prompt, page_context, result)

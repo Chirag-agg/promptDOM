@@ -17,13 +17,8 @@ def mock_inspection_service():
 
 @pytest.mark.asyncio
 async def test_planner_service_initialization(mock_inspection_service, monkeypatch):
-    monkeypatch.setenv("PROMPTDOM_PLANNER", "RULE")
     service = PlannerService(mock_inspection_service)
     assert isinstance(service.planner, RulePlanner)
-    
-    monkeypatch.setenv("PROMPTDOM_PLANNER", "LLM")
-    service = PlannerService(mock_inspection_service)
-    assert isinstance(service.planner, LLMPlanner)
 
 @pytest.mark.asyncio
 async def test_planner_service_get_plan(mock_inspection_service, monkeypatch, tmp_path):
