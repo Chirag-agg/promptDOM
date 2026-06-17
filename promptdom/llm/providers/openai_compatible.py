@@ -8,9 +8,9 @@ from ..exceptions import ProviderConnectionError, ProviderTimeoutError, Provider
 
 T = TypeVar('T', bound=BaseModel)
 
-class OllamaProvider(BaseLLMProvider):
-    def __init__(self, model_name: str, timeout: int = 30):
-        self.base_url = "http://localhost:11434/api"
+class BaseOpenAICompatibleProvider(BaseLLMProvider):
+    def __init__(self, base_url: str, model_name: str, timeout: int = 30):
+        self.base_url = base_url
         self.model_name = model_name
         self.timeout = timeout
         
@@ -24,11 +24,11 @@ class OllamaProvider(BaseLLMProvider):
             supports_system_prompt=True
         )
 
-    async def _post(self, endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def _post(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
-                    f"{self.base_url}/{endpoint}",
+                    f"{self.base_url}/chat/completions",
                     json=payload
                 )
                 if response.status_code != 200:
@@ -41,6 +41,13 @@ class OllamaProvider(BaseLLMProvider):
         except httpx.RequestError as e:
             raise ProviderConnectionError(f"Request failed: {str(e)}")
 
+    def _build_messages(self, prompt: str, system_prompt: Optional[str]) -> list:
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        return messages
+
     async def generate(
         self,
         prompt: str,
@@ -52,33 +59,24 @@ class OllamaProvider(BaseLLMProvider):
         
         payload = {
             "model": self.model_name,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": temperature,
-                "num_predict": max_tokens
-            }
+            "messages": self._build_messages(prompt, system_prompt),
+            "temperature": temperature,
+            "max_tokens": max_tokens
         }
-        if system_prompt:
-            payload["system"] = system_prompt
-            
-        data = await self._post("generate", payload)
+        
+        data = await self._post(payload)
         
         latency_ms = (time.time() - start_time) * 1000
-        content = data.get("response", "")
-        usage = {
-            "prompt_tokens": data.get("prompt_eval_count", 0),
-            "completion_tokens": data.get("eval_count", 0),
-            "total_tokens": data.get("prompt_eval_count", 0) + data.get("eval_count", 0)
-        }
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        usage = data.get("usage", {})
         
         return LLMResponse(
             content=content,
-            provider="OLLAMA",
+            provider=self.__class__.__name__.replace("Provider", "").upper(),
             model=self.model_name,
             latency_ms=latency_ms,
             token_usage=usage,
-            finish_reason="stop" if data.get("done") else "unknown"
+            finish_reason=data.get("choices", [{}])[0].get("finish_reason")
         )
 
     async def generate_structured(
@@ -98,19 +96,14 @@ class OllamaProvider(BaseLLMProvider):
         
         payload = {
             "model": self.model_name,
-            "prompt": prompt,
-            "stream": False,
-            "format": "json",
-            "options": {
-                "temperature": temperature,
-                "num_predict": max_tokens
-            }
+            "messages": self._build_messages(prompt, enhanced_system),
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"}
         }
-        if enhanced_system:
-            payload["system"] = enhanced_system
-            
-        data = await self._post("generate", payload)
-        content = data.get("response", "")
+        
+        data = await self._post(payload)
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
         
         try:
             return schema.model_validate_json(content)

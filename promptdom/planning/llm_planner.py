@@ -1,10 +1,13 @@
 from typing import Optional
 from .models import ActionPlan, PlannerContext
 from ..llm.base import BaseLLMProvider
+from ..llm.exceptions import ProviderValidationError
 
 class LLMPlanner:
     def __init__(self, provider: BaseLLMProvider):
         self.provider = provider
+        if not self.provider.capabilities.supports_json_mode:
+            raise ProviderValidationError("LLMPlanner requires a provider that supports structured JSON mode.")
         
     async def plan(self, context: PlannerContext) -> ActionPlan:
         system_prompt = (
