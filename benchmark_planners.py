@@ -1,6 +1,8 @@
 import asyncio
 import json
 import time
+import argparse
+import os
 
 from promptdom.inspection.models import CompactInspectionResponse
 from promptdom.planning.models import PlannerContext
@@ -8,6 +10,8 @@ from promptdom.planning.service import PlannerService
 from promptdom.planning.llm_planner import LLMPlanner
 from promptdom.planning.hybrid_planner import HybridPlannerService
 from promptdom.llm.providers.mock import MockProvider
+from promptdom.llm.provider_factory import ProviderFactory
+from promptdom.config.llm import LLMSettings
 from promptdom.analytics.collector import AnalyticsCollector
 
 class MockInspectionService:
@@ -20,6 +24,10 @@ class MockInspectionService:
         )
 
 async def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--provider", default="mock")
+    args = parser.parse_args()
+
     with open("datasets/planning.json", "r", encoding="utf-8") as f:
         dataset = json.load(f)
 
@@ -27,7 +35,7 @@ async def main():
     analytics = AnalyticsCollector(data_dir="data_benchmark")
     
     rule_planner = PlannerService(inspection, analytics)
-    llm_provider = MockProvider()
+    llm_provider = ProviderFactory.create(args.provider, LLMSettings())
     llm_planner = LLMPlanner(llm_provider)
     hybrid_planner = HybridPlannerService(rule_planner, llm_planner, analytics)
 
@@ -43,6 +51,8 @@ async def main():
         total_latency = 0.0
         
         fallback_count = 0
+        llm_schema_errors = 0
+        llm_failures = 0
 
         for item in dataset:
             prompt = item["prompt"]
@@ -67,6 +77,9 @@ async def main():
                         fallback_count += 1
                         
             except Exception as e:
+                if "ProviderValidationError" in str(type(e)):
+                    llm_schema_errors += 1
+                llm_failures += 1
                 print(f"Error evaluating '{prompt}': {e}")
             
             latency = (time.time() - start) * 1000
@@ -76,6 +89,9 @@ async def main():
         print(f"Average Latency: {total_latency/len(dataset):.2f}ms")
         if engine_name == "HybridPlanner":
             print(f"Fallback to LLM Count: {fallback_count}")
+        if engine_name == "LLMPlanner":
+            print(f"Failure Rate: {llm_failures}/{len(dataset)} ({(llm_failures/len(dataset))*100:.1f}%)")
+            print(f"Schema Validity Rate: {(len(dataset) - llm_schema_errors)/len(dataset)*100:.1f}%")
 
 if __name__ == "__main__":
     asyncio.run(main())

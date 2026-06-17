@@ -11,7 +11,7 @@ from .models import ActionRequest, ActionResponse
 from .inspection.service import InspectionService
 from .inspection.models import InspectionResponse, CompactInspectionResponse, ResolutionInspectionResponse
 from .planning.service import PlannerService
-from .planning.models import PlannerResult
+from .planning.models import PlannerResult, PlannerComparisonResponse, PlannerContext
 from .resolution.resolver import SemanticResolver
 from .resolution.models import ResolutionResult
 from .features.store import FeatureStore
@@ -34,7 +34,9 @@ from .config.llm import get_llm_settings
 from .llm.provider_factory import ProviderFactory
 from .planning.llm_planner import LLMPlanner
 from .planning.hybrid_planner import HybridPlannerService
-from .analytics.models import PlannerAnalytics
+from .analytics.models import PlannerAnalytics, PlannerComparisonLog, PlannerDisagreementMetrics
+from .llm.health import LLMHealthService, HealthResponse
+from .llm.models import LLMResponse
 
 
 app = FastAPI(title="PromptDOM", description="Local-first browser automation via natural language")
@@ -56,6 +58,7 @@ llm_settings = get_llm_settings()
 llm_provider = ProviderFactory.get_provider(llm_settings)
 llm_planner = LLMPlanner(llm_provider)
 hybrid_planner = HybridPlannerService(planner_service, llm_planner, analytics_collector)
+llm_health_service = LLMHealthService(llm_provider, llm_settings.model, llm_settings.provider)
 
 auto_apply_service = AutoApplyService(
     matching_service=feature_matching_service,
@@ -127,6 +130,111 @@ async def plan_prompt_hybrid(request: ActionRequest):
     """
     try:
         return await hybrid_planner.get_plan(request.prompt)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/plan/compare", response_model=PlannerComparisonResponse)
+async def plan_prompt_compare(request: ActionRequest):
+    """
+    Compare planner engines, evaluating agreement and correctness against ground truth.
+    """
+    try:
+        import time
+        t0 = time.time()
+        rule_result = await planner_service.get_plan(request.prompt)
+        rule_latency = (time.time() - t0) * 1000
+        
+        t0 = time.time()
+        try:
+            page_context = await inspection_service.inspect_compact()
+            llm_context = PlannerContext(prompt=request.prompt, page_context=page_context)
+            llm_plan = await llm_planner.plan(llm_context)
+            llm_result = PlannerResult(success=True, plans=[llm_plan])
+        except Exception as e:
+            llm_result = PlannerResult(success=False, failure_reason=str(e), plans=[])
+        llm_latency = (time.time() - t0) * 1000
+            
+        best_rule = rule_result.plans[0] if rule_result.plans else None
+        
+        if best_rule and best_rule.confidence >= 0.80:
+            winner = "RULE"
+        else:
+            if llm_result.success:
+                winner = "LLM"
+            else:
+                winner = "RULE (fallback)"
+        
+        rule_target = best_rule.target if best_rule else ""
+        llm_target = llm_result.plans[0].target if llm_result.plans else ""
+        agreed = (rule_target == llm_target) and rule_target != ""
+        
+        import json
+        import os
+        ground_truth = None
+        if os.path.exists("datasets/planning.json"):
+            with open("datasets/planning.json", "r", encoding="utf-8") as f:
+                dataset = json.load(f)
+            for item in dataset:
+                if item["prompt"] == request.prompt:
+                    ground_truth = item["expected"]["plans"][0] if item["expected"].get("plans") else None
+                    break
+                    
+        ground_truth_available = ground_truth is not None
+        
+        def is_correct(result: PlannerResult):
+            if not ground_truth_available:
+                return None
+            plan = result.plans[0] if result.plans else None
+            if not plan and not ground_truth:
+                return True
+            if not plan or not ground_truth:
+                return False
+            return plan.action == ground_truth["action"] and plan.target == ground_truth["target"]
+            
+        analytics_collector.log_planner_comparison(
+            PlannerComparisonLog(
+                prompt=request.prompt,
+                rule_target=rule_target,
+                llm_target=llm_target,
+                agreed=agreed
+            )
+        )
+        
+        return PlannerComparisonResponse(
+            rule=rule_result,
+            llm=llm_result,
+            hybrid={"selected": winner},
+            agreement=agreed,
+            winner=winner,
+            ground_truth_available=ground_truth_available,
+            rule_correct=is_correct(rule_result),
+            llm_correct=is_correct(llm_result),
+            hybrid_correct=is_correct(rule_result if "RULE" in winner else llm_result),
+            rule_latency_ms=rule_latency,
+            llm_latency_ms=llm_latency
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/llm/providers")
+async def get_llm_providers():
+    return {
+        "available": ["MOCK", "OLLAMA", "LMSTUDIO"],
+        "current": llm_settings.provider,
+        "model": llm_settings.model
+    }
+
+@app.get("/llm/health", response_model=HealthResponse)
+async def get_llm_health():
+    return await llm_health_service.check_provider()
+
+class TestLLMRequest(BaseModel):
+    prompt: str
+
+@app.post("/llm/test", response_model=LLMResponse)
+async def test_llm_provider(request: TestLLMRequest):
+    try:
+        return await llm_provider.generate(request.prompt)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -273,6 +381,10 @@ async def get_feature_analytics():
 @app.get("/analytics/planners", response_model=PlannerAnalytics)
 async def get_planner_analytics():
     return analytics_service.get_planner_analytics()
+
+@app.get("/analytics/planner-disagreement", response_model=PlannerDisagreementMetrics)
+async def get_planner_disagreement():
+    return analytics_service.get_planner_disagreement()
 
 @app.get("/analytics/sites", response_model=List[SiteAnalytics])
 async def get_site_analytics():

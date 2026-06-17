@@ -6,9 +6,12 @@ from promptdom.llm.provider_factory import ProviderFactory
 from promptdom.llm.providers.mock import MockProvider
 from promptdom.llm.providers.ollama import OllamaProvider
 
-class DummySchema(BaseModel):
+class DummyAction(BaseModel):
     action: str
     target: str
+
+class DummySchema(BaseModel):
+    plans: list[DummyAction]
 
 def test_factory_resolves_mock():
     config = LLMSettings(provider="MOCK")
@@ -41,10 +44,6 @@ async def test_mock_provider_structured():
     # "hide comments" matches dataset which returns {"action": "hide", "target": "comments", "target_type": "section"}
     resp = await provider.generate_structured(prompt="hide comments", schema=DummySchema)
     
-    assert resp.action == "hide"
-    assert resp.target == "comments"
-
-def test_ollama_not_implemented():
-    provider = OllamaProvider()
-    with pytest.raises(NotImplementedError):
-        _ = provider.capabilities
+    assert len(resp.plans) > 0
+    assert resp.plans[0].action == "hide"
+    assert resp.plans[0].target == "comments"
