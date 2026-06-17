@@ -1,6 +1,7 @@
 import os
 from typing import List, Union
-from .models import ApplicationLog, RepairLog, LLMRequestLog, PlanningLog, PlannerComparisonLog
+from .models import ApplicationLog, RepairLog, LLMRequestLog, PlanningLog, PlannerComparisonLog, FeatureCompilationLog, RuntimeEventLog
+import json
 
 class AnalyticsCollector:
     def __init__(self, data_dir: str = "data"):
@@ -11,10 +12,16 @@ class AnalyticsCollector:
         self.llm_requests_file = os.path.join(self.data_dir, "llm_requests.jsonl")
         self.planning_requests_file = os.path.join(self.data_dir, "planning_requests.jsonl")
         self.planner_comparisons_file = os.path.join(self.data_dir, "planner_comparisons.jsonl")
+        self.feature_compilations_file = os.path.join(self.data_dir, "feature_compilations.jsonl")
+        self.runtime_events_file = os.path.join(self.data_dir, "runtime_events.jsonl")
 
-    def _append_log(self, filepath: str, log: Union[ApplicationLog, RepairLog, LLMRequestLog, PlanningLog, PlannerComparisonLog]):
+    def _append_log(self, filepath: str, log: Union[ApplicationLog, RepairLog, LLMRequestLog, PlanningLog, PlannerComparisonLog, FeatureCompilationLog]):
         with open(filepath, "a", encoding="utf-8") as f:
             f.write(log.model_dump_json() + "\n")
+
+    def _append_jsonl(self, filepath: str, data: dict):
+        with open(filepath, "a", encoding="utf-8") as f:
+            f.write(json.dumps(data) + "\n")
 
     def log_application(self, log: ApplicationLog):
         self._append_log(self.applications_file, log)
@@ -29,7 +36,13 @@ class AnalyticsCollector:
         self._append_log(self.planning_requests_file, log)
 
     def log_planner_comparison(self, log: PlannerComparisonLog):
-        self._append_log(self.planner_comparisons_file, log)
+        self._append_jsonl(self.planner_comparisons_file, log.model_dump())
+
+    def log_feature_compilation(self, log: FeatureCompilationLog):
+        self._append_jsonl(self.feature_compilations_file, log.model_dump())
+
+    def log_runtime_event(self, log: RuntimeEventLog):
+        self._append_jsonl(self.runtime_events_file, log.model_dump())
 
     def get_application_logs(self) -> List[ApplicationLog]:
         if not os.path.exists(self.applications_file):

@@ -45,6 +45,18 @@ class PlannerComparisonLog(BaseModel):
     llm_target: str
     agreed: bool
 
+class FeatureCompilationLog(BaseModel):
+    timestamp: str = Field(default_factory=get_utc_now)
+    feature_type: str
+    success: bool
+    compile_ms: float
+
+class RuntimeEventLog(BaseModel):
+    timestamp: str = Field(default_factory=get_utc_now)
+    feature_id: str
+    runtime_instance_id: str
+    event: str
+
 class FeatureAnalytics(BaseModel):
     name: str
     apply_count: int
