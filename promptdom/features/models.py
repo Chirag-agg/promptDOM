@@ -32,3 +32,6 @@ class Feature(FeatureCreate):
     last_repaired_at: Optional[str] = None
     last_status: str = "unknown"
     last_seen_at: Optional[str] = None
+    feature_spec: Optional[dict] = None
+    compiler_version: Optional[str] = None
+    compiled_javascript: Optional[str] = None

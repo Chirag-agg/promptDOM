@@ -3,7 +3,8 @@ from typing import Set, Tuple
 from .matching_service import FeatureMatchingService
 from .store import FeatureStore
 from .auto_apply_models import AutoApplyResult, AppliedFeature
-from ..runtime import RuntimeEngine
+from typing import List, Optional
+from ..runtime.engine import RuntimeEngine
 from ..inspection.service import InspectionService
 from ..browser import BrowserManager
 from ..analytics.collector import AnalyticsCollector

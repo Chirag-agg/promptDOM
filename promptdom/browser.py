@@ -83,6 +83,10 @@ class BrowserManager:
         target_page = await self.get_active_page()
         return await target_page.evaluate(script)
 
+    async def execute_compiled(self, compiled_feature: "CompiledFeature"):
+        """Execute pre-compiled JavaScript Feature"""
+        return await self.execute_js(compiled_feature.javascript)
+
     async def cleanup(self):
         """Clean up resources"""
         if self.playwright:

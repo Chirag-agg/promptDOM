@@ -6,7 +6,7 @@ from typing import Dict, Any
 
 from .browser import BrowserManager
 from .planner import PromptPlanner
-from .runtime import RuntimeEngine
+from .runtime.engine import RuntimeEngine
 from .models import ActionRequest, ActionResponse
 from .inspection.service import InspectionService
 from .inspection.models import InspectionResponse, CompactInspectionResponse, ResolutionInspectionResponse
@@ -37,6 +37,9 @@ from .planning.hybrid_planner import HybridPlannerService
 from .analytics.models import PlannerAnalytics, PlannerComparisonLog, PlannerDisagreementMetrics
 from .llm.health import LLMHealthService, HealthResponse
 from .llm.models import LLMResponse
+from .compiler.compiler import FeatureCompiler
+from .compiler.models import FeatureSpec
+from .planning.feature_spec_planner import FeatureSpecPlanner
 
 
 app = FastAPI(title="PromptDOM", description="Local-first browser automation via natural language")
@@ -59,6 +62,26 @@ llm_provider = ProviderFactory.get_provider(llm_settings)
 llm_planner = LLMPlanner(llm_provider)
 hybrid_planner = HybridPlannerService(planner_service, llm_planner, analytics_collector)
 llm_health_service = LLMHealthService(llm_provider, llm_settings.model, llm_settings.provider)
+feature_compiler = FeatureCompiler()
+
+from .capabilities.registry import CapabilityRegistry
+capability_registry = CapabilityRegistry()
+feature_spec_planner = FeatureSpecPlanner(llm_provider, capability_registry)
+
+from .runtime.registry import RuntimeRegistry
+from .runtime.lifecycle import LifecycleManager
+from .runtime.service import RuntimeService
+from .runtime.heartbeat import HeartbeatMonitor
+
+runtime_registry = RuntimeRegistry()
+lifecycle_manager = LifecycleManager(runtime_registry, browser_manager, analytics_collector)
+runtime_service = RuntimeService(runtime_registry, lifecycle_manager, feature_compiler, feature_store, analytics_collector, browser_manager)
+heartbeat_monitor = HeartbeatMonitor(browser_manager, runtime_registry, runtime_service)
+
+from .transform.service import ExperimentalTransformationService
+from .transform.executor import TransformExecutor
+experimental_transformation_service = ExperimentalTransformationService(llm_provider, inspection_service)
+transform_executor = TransformExecutor(browser_manager)
 
 auto_apply_service = AutoApplyService(
     matching_service=feature_matching_service,
@@ -101,6 +124,8 @@ async def startup_event():
     try:
         await browser_manager.initialize()
         print("Browser manager initialized successfully")
+        heartbeat_monitor.start()
+        print("Heartbeat monitor started")
     except Exception as e:
         print(f"Warning: Could not initialize browser manager: {e}")
         print("Make sure Chrome is running with --remote-debugging-port=9222")
@@ -109,6 +134,7 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Clean up resources on shutdown"""
+    heartbeat_monitor.stop()
     await browser_manager.cleanup()
 
 
@@ -228,6 +254,98 @@ async def get_llm_providers():
 async def get_llm_health():
     return await llm_health_service.check_provider()
 
+from .runtime.models import RuntimeFeature
+
+@app.get("/runtime/features", response_model=list[RuntimeFeature])
+async def list_runtime_features():
+    return runtime_service.get_all_features()
+
+@app.get("/capabilities")
+async def get_capabilities():
+    return capability_registry.list_all()
+
+from .transform.models import TransformationRequest, GeneratedTransformation, TransformationPreviewResponse, TransformExecutionRequest, TransformExecutionResult, TransformTestResponse
+
+@app.post("/transform/experimental", response_model=GeneratedTransformation)
+async def generate_experimental_transformation(request: TransformationRequest):
+    try:
+        return await experimental_transformation_service.generate_transformation(request.prompt)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/transform/preview", response_model=TransformationPreviewResponse)
+async def generate_transformation_preview(request: TransformationRequest):
+    try:
+        return await experimental_transformation_service.generate_preview(request.prompt)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/transform/apply", response_model=TransformExecutionResult)
+async def apply_transformation(request: TransformExecutionRequest):
+    preview = experimental_transformation_service.get_preview(request.transformation_id)
+    if not preview:
+        raise HTTPException(status_code=404, detail="Transformation preview not found")
+        
+    css_applied = await transform_executor.apply_css(request.transformation_id, preview.transformation.css)
+    js_applied = await transform_executor.apply_javascript(request.transformation_id, preview.transformation.javascript)
+    
+    return TransformExecutionResult(
+        transformation_id=request.transformation_id,
+        success=True,
+        applied_css=css_applied,
+        applied_javascript=js_applied,
+        message="Transformation applied successfully"
+    )
+
+@app.post("/transform/remove")
+async def remove_transformation(request: TransformExecutionRequest):
+    success = await transform_executor.remove_transformation(request.transformation_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to remove transformation")
+    return {"status": "removed"}
+
+@app.post("/transform/test", response_model=TransformTestResponse)
+async def test_transformation(request: TransformationRequest):
+    try:
+        # Generate Preview
+        preview = await experimental_transformation_service.generate_preview(request.prompt)
+        
+        # Apply Transformation
+        css_applied = await transform_executor.apply_css(preview.transformation_id, preview.transformation.css)
+        js_applied = await transform_executor.apply_javascript(preview.transformation_id, preview.transformation.javascript)
+        
+        execution = TransformExecutionResult(
+            transformation_id=preview.transformation_id,
+            success=True,
+            applied_css=css_applied,
+            applied_javascript=js_applied,
+            message="Test transformation applied successfully"
+        )
+        
+        return TransformTestResponse(
+            preview=preview,
+            execution=execution
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/runtime/features/{instance_id}/stop")
+async def stop_runtime_feature(instance_id: str):
+    success = await runtime_service.stop_feature(instance_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Feature instance not found or already stopped")
+    return {"status": "stopped"}
+
+@app.post("/runtime/features/{instance_id}/restart", response_model=RuntimeFeature)
+async def restart_runtime_feature(instance_id: str):
+    try:
+        new_instance = await runtime_service.restart_feature(instance_id)
+        if not new_instance:
+            raise HTTPException(status_code=404, detail="Feature instance not found")
+        return new_instance
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 class TestLLMRequest(BaseModel):
     prompt: str
 
@@ -235,6 +353,70 @@ class TestLLMRequest(BaseModel):
 async def test_llm_provider(request: TestLLMRequest):
     try:
         return await llm_provider.generate(request.prompt)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class CompileRequest(BaseModel):
+    feature_spec: dict
+
+class ValidationResponse(BaseModel):
+    valid: bool
+    warnings: list[str]
+
+@app.post("/compile")
+async def compile_feature(request: CompileRequest):
+    import time
+    from .compiler.models import FeatureSpecAdapter
+    from .analytics.models import FeatureCompilationLog
+    try:
+        t0 = time.time()
+        # Parse dynamic union using a root model or type adapter
+        from pydantic import TypeAdapter
+        adapter = TypeAdapter(FeatureSpec)
+        spec = adapter.validate_python(request.feature_spec)
+        
+        compiled = feature_compiler.compile(spec)
+        latency = (time.time() - t0) * 1000
+        
+        analytics_collector.log_feature_compilation(FeatureCompilationLog(
+            feature_type=spec.feature_type,
+            success=True,
+            compile_ms=latency
+        ))
+        
+        return {
+            "compiled": True,
+            "javascript": compiled.javascript,
+            "compiler_version": compiled.compiler_version
+        }
+    except Exception as e:
+        latency = (time.time() - t0) * 1000 if 't0' in locals() else 0
+        analytics_collector.log_feature_compilation(FeatureCompilationLog(
+            feature_type=request.feature_spec.get("feature_type", "unknown"),
+            success=False,
+            compile_ms=latency
+        ))
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/compile/validate", response_model=ValidationResponse)
+async def validate_compile(request: CompileRequest):
+    try:
+        from pydantic import TypeAdapter
+        adapter = TypeAdapter(FeatureSpec)
+        spec = adapter.validate_python(request.feature_spec)
+        feature_compiler.validator.validate(spec)
+        return ValidationResponse(valid=True, warnings=[])
+    except Exception as e:
+        return ValidationResponse(valid=False, warnings=[str(e)])
+
+class FeatureSpecRequest(BaseModel):
+    prompt: str
+
+@app.post("/feature-spec")
+async def generate_feature_spec(request: FeatureSpecRequest):
+    try:
+        spec = await feature_spec_planner.plan(request.prompt)
+        return {"feature_spec": spec.model_dump()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
