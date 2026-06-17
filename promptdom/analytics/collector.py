@@ -1,6 +1,6 @@
 import os
 from typing import List, Union
-from .models import ApplicationLog, RepairLog, LLMRequestLog, PlanningLog
+from .models import ApplicationLog, RepairLog, LLMRequestLog, PlanningLog, PlannerComparisonLog
 
 class AnalyticsCollector:
     def __init__(self, data_dir: str = "data"):
@@ -10,8 +10,9 @@ class AnalyticsCollector:
         self.repairs_file = os.path.join(self.data_dir, "repairs.jsonl")
         self.llm_requests_file = os.path.join(self.data_dir, "llm_requests.jsonl")
         self.planning_requests_file = os.path.join(self.data_dir, "planning_requests.jsonl")
+        self.planner_comparisons_file = os.path.join(self.data_dir, "planner_comparisons.jsonl")
 
-    def _append_log(self, filepath: str, log: Union[ApplicationLog, RepairLog, LLMRequestLog, PlanningLog]):
+    def _append_log(self, filepath: str, log: Union[ApplicationLog, RepairLog, LLMRequestLog, PlanningLog, PlannerComparisonLog]):
         with open(filepath, "a", encoding="utf-8") as f:
             f.write(log.model_dump_json() + "\n")
 
@@ -26,6 +27,9 @@ class AnalyticsCollector:
 
     def log_planning_request(self, log: PlanningLog):
         self._append_log(self.planning_requests_file, log)
+
+    def log_planner_comparison(self, log: PlannerComparisonLog):
+        self._append_log(self.planner_comparisons_file, log)
 
     def get_application_logs(self) -> List[ApplicationLog]:
         if not os.path.exists(self.applications_file):
@@ -65,4 +69,14 @@ class AnalyticsCollector:
             for line in f:
                 if line.strip():
                     logs.append(PlanningLog.model_validate_json(line))
+        return logs
+
+    def get_planner_comparisons(self) -> List[PlannerComparisonLog]:
+        if not os.path.exists(self.planner_comparisons_file):
+            return []
+        logs = []
+        with open(self.planner_comparisons_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    logs.append(PlannerComparisonLog.model_validate_json(line))
         return logs

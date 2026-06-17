@@ -16,4 +16,22 @@ class PlannerContext(BaseModel):
     page_context: CompactInspectionResponse
 
 class PlannerResult(BaseModel):
-    plans: List[ActionPlan] = Field(max_length=5)
+    success: bool = True
+    failure_reason: Optional[str] = None
+    plans: List[ActionPlan] = Field(default_factory=list, max_length=5)
+
+class HybridSelection(BaseModel):
+    selected: str
+
+class PlannerComparisonResponse(BaseModel):
+    rule: PlannerResult
+    llm: PlannerResult
+    hybrid: HybridSelection
+    agreement: bool
+    winner: str
+    ground_truth_available: bool
+    rule_correct: Optional[bool] = None
+    llm_correct: Optional[bool] = None
+    hybrid_correct: Optional[bool] = None
+    rule_latency_ms: float
+    llm_latency_ms: float

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import List, Dict, Any
-from .models import FeatureAnalytics, SiteAnalytics, SystemHealth, FeatureTimeline, RecentAnalytics, PlannerAnalytics
+from .models import FeatureAnalytics, SiteAnalytics, SystemHealth, FeatureTimeline, RecentAnalytics, PlannerAnalytics, PlannerDisagreementMetrics
 from .collector import AnalyticsCollector
 from ..features.store import FeatureStore
 
@@ -94,6 +94,17 @@ class AnalyticsService:
             hybrid_rule_usage=hybrid_rule_usage,
             hybrid_llm_usage=hybrid_llm_usage,
             average_latency_ms=total_time / count if count > 0 else 0.0
+        )
+
+    def get_planner_disagreement(self) -> PlannerDisagreementMetrics:
+        logs = self.collector.get_planner_comparisons()
+        if not logs:
+            return PlannerDisagreementMetrics(disagreement_rate=0.0, sample_count=0)
+        
+        disagreements = sum(1 for log in logs if not log.agreed)
+        return PlannerDisagreementMetrics(
+            disagreement_rate=disagreements / len(logs),
+            sample_count=len(logs)
         )
 
     def get_system_health(self) -> SystemHealth:

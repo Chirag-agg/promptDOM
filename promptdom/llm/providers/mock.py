@@ -40,11 +40,14 @@ class MockProvider(BaseLLMProvider):
         temperature: float = 0.0,
         max_tokens: int = 1000
     ) -> LLMResponse:
-        content = "{}"
+        content = None
         for item in self.dataset:
-            if item["prompt"].lower() in prompt.lower():
+            if prompt.lower() in item["prompt"].lower() or item["prompt"].lower() in prompt.lower():
                 content = json.dumps(item["expected"])
                 break
+                
+        if content is None:
+            raise ValueError("prompt_not_in_dataset")
                 
         return LLMResponse(
             content=content,

@@ -1,0 +1,121 @@
+[
+  {
+    "prompt": "hide comments",
+    "expected": {
+      "plans": [
+        {
+          "action": "hide",
+          "target": "comments",
+          "target_type": "section"
+        }
+      ]
+    }
+  },
+  {
+    "prompt": "highlight subscribe button",
+    "expected": {
+      "plans": [
+        {
+          "action": "highlight",
+          "target": "subscribe",
+          "target_type": "button"
+        }
+      ]
+    }
+  },
+  {
+    "prompt": "remove the sidebar ads",
+    "expected": {
+      "plans": [
+        {
+          "action": "hide",
+          "target": "sidebar ads",
+          "target_type": "section"
+        }
+      ]
+    }
+  },
+  {
+    "prompt": "make the background color dark mode",
+    "expected": {
+      "plans": [
+        {
+          "action": "style",
+          "target": "background",
+          "target_type": "section"
+        }
+      ]
+    }
+  },
+  {
+    "prompt": "click the login link",
+    "expected": {
+      "plans": [
+        {
+          "action": "click",
+          "target": "login",
+          "target_type": "link"
+        }
+      ]
+    }
+  },
+  {
+    "prompt": "extract all table rows",
+    "expected": {
+      "plans": [
+        {
+          "action": "extract",
+          "target": "table rows",
+          "target_type": "section"
+        }
+      ]
+    }
+  },
+  {
+    "prompt": "type 'hello world' into the search bar",
+    "expected": {
+      "plans": [
+        {
+          "action": "type",
+          "target": "search bar",
+          "target_type": "input"
+        }
+      ]
+    }
+  },
+  {
+    "prompt": "hide comments and sidebar",
+    "expected": {
+      "plans": [
+        {
+          "action": "hide",
+          "target": "comments",
+          "target_type": "section"
+        },
+        {
+          "action": "hide",
+          "target": "sidebar",
+          "target_type": "section"
+        }
+      ]
+    }
+  },
+  {
+    "prompt": "hide that thing",
+    "expected": {
+      "plans": [
+        {
+          "action": "hide",
+          "target": "that thing",
+          "target_type": "unknown"
+        }
+      ]
+    }
+  },
+  {
+    "prompt": "make me a sandwich",
+    "expected": {
+      "plans": []
+    }
+  }
+]

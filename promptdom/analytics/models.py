@@ -26,6 +26,7 @@ class LLMRequestLog(BaseModel):
     model: str
     latency_ms: float
     success: bool
+    error: Optional[str] = None
     prompt_tokens: Optional[int] = None
     completion_tokens: Optional[int] = None
 
@@ -36,6 +37,13 @@ class PlanningLog(BaseModel):
     success: bool
     execution_time_ms: float
     fallback_reason: Optional[str] = None
+
+class PlannerComparisonLog(BaseModel):
+    timestamp: str = Field(default_factory=get_utc_now)
+    prompt: str
+    rule_target: str
+    llm_target: str
+    agreed: bool
 
 class FeatureAnalytics(BaseModel):
     name: str
@@ -65,6 +73,10 @@ class PlannerAnalytics(BaseModel):
     hybrid_rule_usage: int
     hybrid_llm_usage: int
     average_latency_ms: float
+
+class PlannerDisagreementMetrics(BaseModel):
+    disagreement_rate: float
+    sample_count: int
 
 class FeatureTimeline(BaseModel):
     created_at: str
