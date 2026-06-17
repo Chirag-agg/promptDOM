@@ -1,0 +1,72 @@
+[
+  {
+    "prompt": "hide comments",
+    "expected": {
+      "action": "hide",
+      "target": "comments",
+      "target_type": "section",
+      "confidence": 0.95,
+      "reasoning": "Mock reasoning"
+    }
+  },
+  {
+    "prompt": "highlight subscribe button",
+    "expected": {
+      "action": "highlight",
+      "target": "subscribe",
+      "target_type": "button",
+      "confidence": 0.95,
+      "reasoning": "Mock reasoning"
+    }
+  },
+  {
+    "prompt": "remove the sidebar ads",
+    "expected": {
+      "action": "hide",
+      "target": "sidebar ads",
+      "target_type": "section",
+      "confidence": 0.95,
+      "reasoning": "Mock reasoning"
+    }
+  },
+  {
+    "prompt": "make the background color dark mode",
+    "expected": {
+      "action": "style",
+      "target": "background",
+      "target_type": "section",
+      "confidence": 0.95,
+      "reasoning": "Mock reasoning"
+    }
+  },
+  {
+    "prompt": "click the login link",
+    "expected": {
+      "action": "click",
+      "target": "login",
+      "target_type": "link",
+      "confidence": 0.95,
+      "reasoning": "Mock reasoning"
+    }
+  },
+  {
+    "prompt": "extract all table rows",
+    "expected": {
+      "action": "extract",
+      "target": "table rows",
+      "target_type": "section",
+      "confidence": 0.95,
+      "reasoning": "Mock reasoning"
+    }
+  },
+  {
+    "prompt": "type 'hello world' into the search bar",
+    "expected": {
+      "action": "type",
+      "target": "search bar",
+      "target_type": "input",
+      "confidence": 0.95,
+      "reasoning": "Mock reasoning"
+    }
+  }
+]

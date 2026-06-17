@@ -1,0 +1,26 @@
+[
+  {
+    "target": "comments",
+    "expected_selector": "#comments"
+  },
+  {
+    "target": "subscribe button",
+    "expected_selector": "button.yt-subscribe-btn"
+  },
+  {
+    "target": "login link",
+    "expected_selector": "a[href='/login']"
+  },
+  {
+    "target": "search bar",
+    "expected_selector": "input[type='search']"
+  },
+  {
+    "target": "sidebar ads",
+    "expected_selector": ".ad-container.sidebar"
+  },
+  {
+    "target": "profile picture",
+    "expected_selector": "img.avatar"
+  }
+]

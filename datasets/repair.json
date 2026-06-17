@@ -1,0 +1,22 @@
+[
+  {
+    "old_selector": "#comments",
+    "new_selector": "#comment-section"
+  },
+  {
+    "old_selector": ".nav-login-btn",
+    "new_selector": "button[data-testid='login']"
+  },
+  {
+    "old_selector": "div.video-player",
+    "new_selector": "ytd-player#movie_player"
+  },
+  {
+    "old_selector": ".ad-container.sidebar",
+    "new_selector": "aside[aria-label='Advertisements']"
+  },
+  {
+    "old_selector": "input.search-field",
+    "new_selector": "input[name='q']"
+  }
+]

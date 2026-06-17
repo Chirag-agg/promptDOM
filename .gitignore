@@ -25,3 +25,5 @@ dist/
 .idea/
 .vscode/
 *.swp
+data_benchmark/
+planner_replay.jsonl

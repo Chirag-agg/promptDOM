@@ -14,7 +14,27 @@ from .planning.service import PlannerService
 from .planning.models import PlannerResult
 from .resolution.resolver import SemanticResolver
 from .resolution.models import ResolutionResult
+from .features.store import FeatureStore
+from .features.service import FeatureService
+from .features.models import Feature, FeatureCreate
+from .features.matching_models import MatchResult, DiagnosticsResult
+from .features.matcher import FeatureMatcher
+from .features.matching_service import FeatureMatchingService
+from .features.auto_apply_models import AutoApplyResult
+from .features.auto_apply import AutoApplyService
+from .repair.models import RepairResult
+from .repair.updater import SelectorVerifier
+from .resolution.candidates import CandidateBuilder
+from .repair.service import FeatureRepairService
+from .analytics.models import FeatureAnalytics, SiteAnalytics, SystemHealth, FeatureTimeline, RecentAnalytics
+from .analytics.collector import AnalyticsCollector
+from .analytics.service import AnalyticsService
 from .inspection.exceptions import BrowserUnavailableError, NoActivePageError, PageClosedError
+from .config.llm import get_llm_settings
+from .llm.provider_factory import ProviderFactory
+from .planning.llm_planner import LLMPlanner
+from .planning.hybrid_planner import HybridPlannerService
+from .analytics.models import PlannerAnalytics
 
 
 app = FastAPI(title="PromptDOM", description="Local-first browser automation via natural language")
@@ -23,8 +43,37 @@ app = FastAPI(title="PromptDOM", description="Local-first browser automation via
 browser_manager = BrowserManager()
 runtime_engine = RuntimeEngine()
 inspection_service = InspectionService(browser_manager)
-planner_service = PlannerService(inspection_service)
+analytics_collector = AnalyticsCollector()
+planner_service = PlannerService(inspection_service, analytics_collector)
 semantic_resolver = SemanticResolver(inspection_service)
+feature_store = FeatureStore()
+feature_service = FeatureService(feature_store)
+feature_matcher = FeatureMatcher(semantic_resolver)
+feature_matching_service = FeatureMatchingService(feature_store, inspection_service, feature_matcher)
+analytics_service = AnalyticsService(feature_store, analytics_collector)
+
+llm_settings = get_llm_settings()
+llm_provider = ProviderFactory.get_provider(llm_settings)
+llm_planner = LLMPlanner(llm_provider)
+hybrid_planner = HybridPlannerService(planner_service, llm_planner, analytics_collector)
+
+auto_apply_service = AutoApplyService(
+    matching_service=feature_matching_service,
+    store=feature_store,
+    runtime=runtime_engine,
+    inspection_service=inspection_service,
+    browser_manager=browser_manager,
+    analytics_collector=analytics_collector
+)
+candidate_builder = CandidateBuilder()
+selector_verifier = SelectorVerifier(candidate_builder)
+feature_repair_service = FeatureRepairService(
+    store=feature_store,
+    inspection_service=inspection_service,
+    resolver=semantic_resolver,
+    verifier=selector_verifier,
+    analytics_collector=analytics_collector
+)
 
 # Deprecated planner instance for backward compatibility if needed internally
 planner = PromptPlanner()
@@ -68,6 +117,16 @@ async def plan_prompt(request: ActionRequest):
     """
     try:
         return await planner_service.get_plan(request.prompt)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/plan/hybrid", response_model=PlannerResult)
+async def plan_prompt_hybrid(request: ActionRequest):
+    """
+    Perform context-aware planning for a natural language prompt using HybridPlanner.
+    """
+    try:
+        return await hybrid_planner.get_plan(request.prompt)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -121,6 +180,170 @@ async def execute_prompt(request: ActionRequest):
             action={"action": plans[0].action, "target": plans[0].target}, # Return first for backward compatibility
             message=f"Successfully executed: {', '.join(executed_actions)}" if success else "Some or all actions failed."
         )
+
+# Feature Endpoints
+from typing import List
+
+@app.post("/features", response_model=Feature)
+async def create_feature(feature: FeatureCreate):
+    try:
+        return feature_service.create_feature(feature)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/features", response_model=List[Feature])
+async def list_features():
+    return feature_service.list_features()
+
+@app.get("/features/matches", response_model=MatchResult)
+async def get_feature_matches():
+    """
+    Evaluate all stored features against the current page to determine which apply.
+    """
+    try:
+        return await feature_matching_service.get_matches()
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/features/diagnostics", response_model=DiagnosticsResult)
+async def get_feature_diagnostics():
+    """
+    Returns high-level health information about all stored features against the active page.
+    """
+    try:
+        return await feature_matching_service.get_diagnostics()
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/features/apply", response_model=AutoApplyResult)
+async def auto_apply_features(dry_run: bool = False):
+    """
+    Automatically apply ready features to the current page.
+    If dry_run is True, returns what would be applied without executing.
+    """
+    try:
+        return await auto_apply_service.apply_features(dry_run=dry_run)
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/features/stale", response_model=List[Feature])
+async def get_stale_features():
+    """
+    Returns features that are stale on the current page.
+    """
+    try:
+        return await feature_repair_service.get_stale_features()
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/features/repair", response_model=RepairResult)
+async def repair_features(dry_run: bool = False):
+    """
+    Attempts to deterministically repair all stale features on the active page.
+    """
+    try:
+        return await feature_repair_service.repair_features(dry_run=dry_run)
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/features/{feature_id}/timeline", response_model=FeatureTimeline)
+async def get_feature_timeline(feature_id: str):
+    """
+    Returns an audit log of all repairs and applications performed for a given feature.
+    """
+    try:
+        return analytics_service.get_feature_timeline(feature_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.get("/analytics/features", response_model=List[FeatureAnalytics])
+async def get_feature_analytics():
+    return analytics_service.get_feature_analytics()
+
+@app.get("/analytics/planners", response_model=PlannerAnalytics)
+async def get_planner_analytics():
+    return analytics_service.get_planner_analytics()
+
+@app.get("/analytics/sites", response_model=List[SiteAnalytics])
+async def get_site_analytics():
+    return analytics_service.get_site_analytics()
+
+@app.get("/analytics/health", response_model=SystemHealth)
+async def get_system_health():
+    return analytics_service.get_system_health()
+
+@app.get("/analytics/recent", response_model=RecentAnalytics)
+async def get_recent_events():
+    return analytics_service.get_recent_events()
+
+@app.get("/features/{feature_id}", response_model=Feature)
+async def get_feature(feature_id: str):
+    f = feature_service.get_feature(feature_id)
+    if not f:
+        raise HTTPException(status_code=404, detail="Feature not found")
+    return f
+
+@app.delete("/features/{feature_id}")
+async def delete_feature(feature_id: str):
+    if not feature_service.delete_feature(feature_id):
+        raise HTTPException(status_code=404, detail="Feature not found")
+    return {"status": "deleted"}
+
+@app.patch("/features/{feature_id}/toggle", response_model=Feature)
+async def toggle_feature(feature_id: str):
+    f = feature_service.toggle_feature(feature_id)
+    if not f:
+        raise HTTPException(status_code=404, detail="Feature not found")
+    return f
+
+class FromPromptRequest(BaseModel):
+    prompt: str
+
+@app.post("/features/from-prompt", response_model=Feature)
+async def create_feature_from_prompt(request: FromPromptRequest):
+    """
+    Generate a feature from a natural language prompt without executing it.
+    """
+    try:
+        planner_result = await planner_service.get_plan(request.prompt)
+        if not planner_result.plans:
+            raise HTTPException(status_code=400, detail="Could not generate a valid plan for the prompt.")
+            
+        plan = planner_result.plans[0]
+        resolution = await semantic_resolver.resolve(plan.target, plan.target_type)
+        if not resolution.matched:
+            raise HTTPException(status_code=400, detail=f"Could not resolve target '{plan.target}': {resolution.explanation}")
+            
+        page_info = await browser_manager.get_active_tab_info()
+        
+        feature_data = FeatureCreate(
+            name=f"{plan.action.capitalize()} {plan.target.capitalize()}",
+            prompt=request.prompt,
+            source="planner",
+            hostname=page_info.get("hostname", "unknown") if page_info else "unknown",
+            page_type="unknown",
+            target=plan.target,
+            target_type=plan.target_type,
+            action=plan.action,
+            selector=resolution.selector
+        )
+        
+        return feature_service.create_feature(feature_data)
+        
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
 
     except HTTPException:
         raise
