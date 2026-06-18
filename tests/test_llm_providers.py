@@ -23,6 +23,12 @@ def test_factory_resolves_ollama():
     provider = ProviderFactory.get_provider(config)
     assert isinstance(provider, OllamaProvider)
 
+def test_factory_resolves_nvidia():
+    config = LLMSettings(provider="NVIDIA", nvidia_api_key="test-key")
+    provider = ProviderFactory.get_provider(config)
+    from promptdom.llm.providers.nvidia import NvidiaNimProvider
+    assert isinstance(provider, NvidiaNimProvider)
+
 def test_factory_unknown_provider():
     config = LLMSettings(provider="UNKNOWN")
     with pytest.raises(ValueError, match="Unknown LLM Provider"):

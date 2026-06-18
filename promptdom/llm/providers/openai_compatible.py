@@ -9,10 +9,11 @@ from ..exceptions import ProviderConnectionError, ProviderTimeoutError, Provider
 T = TypeVar('T', bound=BaseModel)
 
 class BaseOpenAICompatibleProvider(BaseLLMProvider):
-    def __init__(self, base_url: str, model_name: str, timeout: int = 30):
+    def __init__(self, base_url: str, model_name: str, timeout: int = 30, headers: Optional[Dict[str, str]] = None):
         self.base_url = base_url
         self.model_name = model_name
         self.timeout = timeout
+        self.headers = headers
         
     @property
     def capabilities(self) -> ProviderCapabilities:
@@ -21,19 +22,58 @@ class BaseOpenAICompatibleProvider(BaseLLMProvider):
             supports_json_mode=True,
             supports_tools=False,
             supports_vision=False,
-            supports_system_prompt=True
+            supports_system_prompt=True,
+            max_image_count=0,
+            max_image_size_mb=0.0
         )
 
     async def _post(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        import json
+        payload["stream"] = True
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    json=payload
-                )
-                if response.status_code != 200:
-                    raise ProviderResponseError(f"HTTP {response.status_code}: {response.text}")
-                return response.json()
+                kwargs = {"json": payload}
+                if self.headers:
+                    kwargs["headers"] = self.headers
+                
+                full_content = ""
+                finish_reason = None
+                usage = {}
+                
+                async with client.stream("POST", f"{self.base_url}/chat/completions", **kwargs) as response:
+                    if response.status_code != 200:
+                        await response.aread()
+                        raise ProviderResponseError(f"HTTP {response.status_code}: {response.text}")
+                        
+                    async for line in response.aiter_lines():
+                        line = line.strip()
+                        if not line or line == "data: [DONE]":
+                            continue
+                        if line.startswith("data: "):
+                            data_str = line[6:]
+                            try:
+                                chunk = json.loads(data_str)
+                                choices = chunk.get("choices", [])
+                                if choices:
+                                    delta = choices[0].get("delta", {})
+                                    if "content" in delta and delta["content"]:
+                                        full_content += delta["content"]
+                                    if "finish_reason" in choices[0] and choices[0]["finish_reason"]:
+                                        finish_reason = choices[0]["finish_reason"]
+                                if "usage" in chunk and chunk["usage"]:
+                                    usage = chunk["usage"]
+                            except json.JSONDecodeError:
+                                pass
+                                
+                return {
+                    "choices": [{
+                        "message": {
+                            "content": full_content
+                        },
+                        "finish_reason": finish_reason or "stop"
+                    }],
+                    "usage": usage
+                }
         except httpx.ConnectError as e:
             raise ProviderConnectionError(f"Connection failed: {str(e)}")
         except httpx.TimeoutException as e:
@@ -92,11 +132,11 @@ class BaseOpenAICompatibleProvider(BaseLLMProvider):
         # Inject JSON instruction
         schema_json = schema.model_json_schema()
         enhanced_system = system_prompt or "You are a helpful assistant."
-        enhanced_system += f"\nRespond ONLY in valid JSON matching this schema: {schema_json}"
+        enhanced_system += f"\nRespond ONLY with a valid JSON instance containing the actual data. Do not repeat the schema itself. The JSON object must strictly conform to the following schema:\n{schema_json}"
         
         payload = {
             "model": self.model_name,
-            "messages": self._build_messages(prompt, enhanced_system),
+            "messages": self._build_messages(prompt + "\n\nIMPORTANT: You MUST output the actual populated JSON data instance. Do NOT output the schema definitions. Just the final JSON object.", enhanced_system),
             "temperature": temperature,
             "max_tokens": max_tokens,
             "response_format": {"type": "json_object"}
@@ -109,3 +149,14 @@ class BaseOpenAICompatibleProvider(BaseLLMProvider):
             return schema.model_validate_json(content)
         except Exception as e:
             raise ProviderValidationError(f"Failed to parse provider output into schema: {str(e)}\nOutput: {content}")
+
+    async def generate_multimodal_structured(
+        self,
+        prompt: str,
+        images_base64: list[str],
+        schema: Type[T],
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 1000
+    ) -> T:
+        raise NotImplementedError("OpenAI compatible providers do not yet support multimodal generation in this client")

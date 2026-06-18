@@ -2,18 +2,36 @@ from .base import BaseLLMProvider
 from .providers.mock import MockProvider
 from .providers.ollama import OllamaProvider
 from .providers.lmstudio import LMStudioProvider
+from .providers.nvidia import NvidiaNimProvider
+from .providers.anthropic import AnthropicProvider
 from ..config.llm import LLMSettings
 
 class ProviderFactory:
     @staticmethod
-    def get_provider(config: LLMSettings) -> BaseLLMProvider:
-        provider = config.provider.upper()
-        
+    def _create_provider(provider: str, model: str, config: LLMSettings) -> BaseLLMProvider:
         if provider == "MOCK":
             return MockProvider()
         elif provider == "OLLAMA":
-            return OllamaProvider(model_name=config.model, timeout=config.timeout_seconds)
+            return OllamaProvider(model_name=model, timeout=config.timeout_seconds)
         elif provider == "LMSTUDIO":
-            return LMStudioProvider(model_name=config.model, timeout=config.timeout_seconds)
+            return LMStudioProvider(model_name=model, timeout=config.timeout_seconds)
+        elif provider == "ANTHROPIC":
+            return AnthropicProvider(model_name=model, api_key=config.anthropic_api_key, timeout=config.timeout_seconds, base_url=config.base_url)
+        elif provider == "NVIDIA":
+            return NvidiaNimProvider(
+                model_name=model, 
+                api_key=config.nvidia_api_key, 
+                timeout=config.timeout_seconds,
+                base_url=config.base_url
+            )
         else:
             raise ValueError(f"Unknown LLM Provider: {provider}")
+
+    @staticmethod
+    def get_provider(config: LLMSettings) -> BaseLLMProvider:
+        return ProviderFactory._create_provider(config.provider.upper(), config.model, config)
+
+    @staticmethod
+    def get_designer_provider(config: LLMSettings) -> BaseLLMProvider:
+        model = config.designer_model if config.designer_model else config.model
+        return ProviderFactory._create_provider(config.provider.upper(), model, config)
