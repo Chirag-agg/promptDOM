@@ -57,6 +57,26 @@ class RuntimeEventLog(BaseModel):
     runtime_instance_id: str
     event: str
 
+class DesignPlanLog(BaseModel):
+    timestamp: str = Field(default_factory=get_utc_now)
+    prompt: str
+    confidence: float
+    plan_size: int
+
+from ..visual.models import VisualContext
+from ..design.models import DesignPlan
+
+class TransformFeedbackLog(BaseModel):
+    timestamp: str = Field(default_factory=get_utc_now)
+    prompt: str
+    design_plan: Optional[DesignPlan] = None
+    css: str
+    javascript: str
+    worked: bool
+    score: int
+    notes: Optional[str] = None
+    visual_context: Optional[VisualContext] = None
+
 class FeatureAnalytics(BaseModel):
     name: str
     apply_count: int

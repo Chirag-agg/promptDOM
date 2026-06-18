@@ -1,6 +1,6 @@
 import os
-from typing import List, Union
-from .models import ApplicationLog, RepairLog, LLMRequestLog, PlanningLog, PlannerComparisonLog, FeatureCompilationLog, RuntimeEventLog
+from typing import List, Union, Any
+from .models import ApplicationLog, RepairLog, LLMRequestLog, PlanningLog, PlannerComparisonLog, FeatureCompilationLog, RuntimeEventLog, DesignPlanLog, TransformFeedbackLog
 import json
 
 class AnalyticsCollector:
@@ -14,8 +14,10 @@ class AnalyticsCollector:
         self.planner_comparisons_file = os.path.join(self.data_dir, "planner_comparisons.jsonl")
         self.feature_compilations_file = os.path.join(self.data_dir, "feature_compilations.jsonl")
         self.runtime_events_file = os.path.join(self.data_dir, "runtime_events.jsonl")
+        self.design_plans_file = os.path.join(self.data_dir, "design_plans.jsonl")
+        self.transform_feedback_file = os.path.join(self.data_dir, "transform_feedback.jsonl")
 
-    def _append_log(self, filepath: str, log: Union[ApplicationLog, RepairLog, LLMRequestLog, PlanningLog, PlannerComparisonLog, FeatureCompilationLog]):
+    def _append_log(self, filepath: str, log: Union[ApplicationLog, RepairLog, LLMRequestLog, PlanningLog, PlannerComparisonLog, FeatureCompilationLog, DesignPlanLog, TransformFeedbackLog]):
         with open(filepath, "a", encoding="utf-8") as f:
             f.write(log.model_dump_json() + "\n")
 
@@ -43,6 +45,17 @@ class AnalyticsCollector:
 
     def log_runtime_event(self, log: RuntimeEventLog):
         self._append_jsonl(self.runtime_events_file, log.model_dump())
+
+    def log_design_plan(self, prompt: str, plan: Any):
+        log = DesignPlanLog(
+            prompt=prompt,
+            confidence=plan.confidence,
+            plan_size=len(plan.model_dump_json())
+        )
+        self._append_log(self.design_plans_file, log)
+
+    def log_transform_feedback(self, log: TransformFeedbackLog):
+        self._append_log(self.transform_feedback_file, log)
 
     def get_application_logs(self) -> List[ApplicationLog]:
         if not os.path.exists(self.applications_file):

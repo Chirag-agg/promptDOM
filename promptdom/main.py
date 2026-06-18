@@ -10,6 +10,8 @@ from .runtime.engine import RuntimeEngine
 from .models import ActionRequest, ActionResponse
 from .inspection.service import InspectionService
 from .inspection.models import InspectionResponse, CompactInspectionResponse, ResolutionInspectionResponse
+from .visual.service import VisualInspectionService
+from .visual.models import VisualInspectionResponse
 from .planning.service import PlannerService
 from .planning.models import PlannerResult, PlannerComparisonResponse, PlannerContext
 from .resolution.resolver import SemanticResolver
@@ -49,6 +51,7 @@ browser_manager = BrowserManager()
 runtime_engine = RuntimeEngine()
 inspection_service = InspectionService(browser_manager)
 analytics_collector = AnalyticsCollector()
+visual_inspection_service = VisualInspectionService(browser_manager, inspection_service)
 planner_service = PlannerService(inspection_service, analytics_collector)
 semantic_resolver = SemanticResolver(inspection_service)
 feature_store = FeatureStore()
@@ -59,10 +62,15 @@ analytics_service = AnalyticsService(feature_store, analytics_collector)
 
 llm_settings = get_llm_settings()
 llm_provider = ProviderFactory.get_provider(llm_settings)
+designer_provider = ProviderFactory.get_designer_provider(llm_settings)
 llm_planner = LLMPlanner(llm_provider)
 hybrid_planner = HybridPlannerService(planner_service, llm_planner, analytics_collector)
 llm_health_service = LLMHealthService(llm_provider, llm_settings.model, llm_settings.provider)
 feature_compiler = FeatureCompiler()
+
+from .design.service import DesignPlanner
+from .design.models import DesignPlan
+design_planner = DesignPlanner(designer_provider)
 
 from .capabilities.registry import CapabilityRegistry
 capability_registry = CapabilityRegistry()
@@ -82,6 +90,27 @@ from .transform.service import ExperimentalTransformationService
 from .transform.executor import TransformExecutor
 experimental_transformation_service = ExperimentalTransformationService(llm_provider, inspection_service)
 transform_executor = TransformExecutor(browser_manager)
+
+from .redesign.goal_analyzer import GoalAnalyzerService
+from .redesign.evaluator import EvaluatorService
+from .redesign.repair import RedesignRepairService
+from .redesign.orchestrator import RedesignOrchestrator
+
+goal_analyzer = GoalAnalyzerService(llm_provider)
+evaluator = EvaluatorService(designer_provider)
+redesign_repair_service = RedesignRepairService(semantic_resolver)
+
+redesign_orchestrator = RedesignOrchestrator(
+    browser=browser_manager,
+    inspection_service=inspection_service,
+    visual_service=visual_inspection_service,
+    transform_service=experimental_transformation_service,
+    transform_executor=transform_executor,
+    goal_analyzer=goal_analyzer,
+    evaluator=evaluator,
+    repair_service=redesign_repair_service,
+    design_planner=design_planner
+)
 
 auto_apply_service = AutoApplyService(
     matching_service=feature_matching_service,
@@ -264,19 +293,41 @@ async def list_runtime_features():
 async def get_capabilities():
     return capability_registry.list_all()
 
-from .transform.models import TransformationRequest, GeneratedTransformation, TransformationPreviewResponse, TransformExecutionRequest, TransformExecutionResult, TransformTestResponse
+from .transform.models import TransformationRequest, GeneratedTransformation, TransformationPreviewResponse, TransformExecutionRequest, TransformExecutionResult, TransformTestResponse, TransformFeedbackRequest
+from .analytics.models import TransformFeedbackLog
+
+@app.post("/transform/design", response_model=DesignPlan)
+async def generate_design_plan(request: TransformationRequest):
+    try:
+        inspection_data = await visual_inspection_service.capture_context()
+        plan = await design_planner.generate_plan(request.prompt, inspection_data)
+        
+        # Log to telemetry
+        analytics_collector.log_design_plan(request.prompt, plan)
+        
+        return plan
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/transform/experimental", response_model=GeneratedTransformation)
 async def generate_experimental_transformation(request: TransformationRequest):
     try:
-        return await experimental_transformation_service.generate_transformation(request.prompt)
+        inspection_data = await visual_inspection_service.capture_context()
+        plan = await design_planner.generate_plan(request.prompt, inspection_data)
+        return await experimental_transformation_service.generate_transformation(request.prompt, plan)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/transform/preview", response_model=TransformationPreviewResponse)
 async def generate_transformation_preview(request: TransformationRequest):
     try:
-        return await experimental_transformation_service.generate_preview(request.prompt)
+        inspection_data = await visual_inspection_service.capture_context()
+        plan = await design_planner.generate_plan(request.prompt, inspection_data)
+        
+        # Log to telemetry
+        analytics_collector.log_design_plan(request.prompt, plan)
+        
+        return await experimental_transformation_service.generate_preview(request.prompt, plan)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -304,28 +355,30 @@ async def remove_transformation(request: TransformExecutionRequest):
         raise HTTPException(status_code=500, detail="Failed to remove transformation")
     return {"status": "removed"}
 
+@app.post("/transform/feedback")
+async def log_transform_feedback(request: TransformFeedbackRequest):
+    preview = experimental_transformation_service.get_preview(request.transformation_id)
+    if not preview:
+        raise HTTPException(status_code=404, detail="Transformation preview not found")
+        
+    log = TransformFeedbackLog(
+        prompt=preview.prompt,
+        design_plan=preview.design_plan,
+        css=preview.transformation.css,
+        javascript=preview.transformation.javascript,
+        worked=request.worked,
+        score=request.score,
+        notes=request.notes,
+        visual_context=None # We will populate this in Phase 8.2 once visual context is built
+    )
+    
+    analytics_collector.log_transform_feedback(log)
+    return {"status": "logged"}
+
 @app.post("/transform/test", response_model=TransformTestResponse)
 async def test_transformation(request: TransformationRequest):
     try:
-        # Generate Preview
-        preview = await experimental_transformation_service.generate_preview(request.prompt)
-        
-        # Apply Transformation
-        css_applied = await transform_executor.apply_css(preview.transformation_id, preview.transformation.css)
-        js_applied = await transform_executor.apply_javascript(preview.transformation_id, preview.transformation.javascript)
-        
-        execution = TransformExecutionResult(
-            transformation_id=preview.transformation_id,
-            success=True,
-            applied_css=css_applied,
-            applied_javascript=js_applied,
-            message="Test transformation applied successfully"
-        )
-        
-        return TransformTestResponse(
-            preview=preview,
-            execution=execution
-        )
+        return await redesign_orchestrator.execute_redesign_loop(request.prompt)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -470,6 +523,8 @@ async def execute_prompt(request: ActionRequest):
             action={"action": plans[0].action, "target": plans[0].target}, # Return first for backward compatibility
             message=f"Successfully executed: {', '.join(executed_actions)}" if success else "Some or all actions failed."
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Feature Endpoints
 from typing import List
@@ -670,6 +725,13 @@ async def inspect_page_resolution():
     Get just the DOM snapshot required for semantic target resolution.
     """
     return await inspection_service.inspect_resolution()
+
+@app.get("/visual/latest", response_model=VisualInspectionResponse)
+async def get_latest_visual_context():
+    """
+    Returns the latest visual context, verifying screenshot and DOM capture.
+    """
+    return await visual_inspection_service.capture_context()
 
 
 if __name__ == "__main__":
