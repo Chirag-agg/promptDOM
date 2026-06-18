@@ -12,8 +12,12 @@ class GeneratedTransformation(BaseModel):
     affected_elements: List[str]
     transformation_type: str
 
+from ..design.models import DesignPlan
+
 class TransformationPreviewResponse(BaseModel):
     transformation_id: str
+    prompt: str = ""
+    design_plan: Optional[DesignPlan] = None
     transformation: GeneratedTransformation
     ui_diff_summary: str
 
@@ -30,3 +34,9 @@ class TransformExecutionResult(BaseModel):
 class TransformTestResponse(BaseModel):
     preview: TransformationPreviewResponse
     execution: TransformExecutionResult
+
+class TransformFeedbackRequest(BaseModel):
+    transformation_id: str
+    worked: bool
+    score: int
+    notes: Optional[str] = None

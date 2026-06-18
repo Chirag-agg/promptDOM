@@ -35,14 +35,24 @@ def mock_provider():
         affected_elements=["#shorts"],
         transformation_type="hide"
     )
-    provider.generate_text.return_value = "- Will hide: Shorts"
+    provider.generate.return_value.content = "- Will hide: Shorts"
     return provider
 
 @pytest.mark.asyncio
 async def test_generate_transformation(mock_provider, mock_inspection_service):
     service = ExperimentalTransformationService(mock_provider, mock_inspection_service)
     
-    result = await service.generate_transformation("hide shorts")
+    from promptdom.design.models import DesignPlan, LayoutStrategy, ContentStrategy, VisualStrategy
+    dummy_plan = DesignPlan(
+        goal="test",
+        layout_strategy=LayoutStrategy(primary_layout="feed", navigation_position="none", content_density="high"),
+        content_strategy=ContentStrategy(remove=[], prioritize=[]),
+        visual_strategy=VisualStrategy(theme="dark", spacing="compact", card_style="flat"),
+        confidence=0.9,
+        reasoning="test"
+    )
+
+    result = await service.generate_transformation("hide shorts", dummy_plan)
     
     assert result.css == ".shorts-container { display: none; }"
     assert result.confidence == 0.9
@@ -59,7 +69,17 @@ async def test_generate_transformation(mock_provider, mock_inspection_service):
 async def test_generate_preview(mock_provider, mock_inspection_service):
     service = ExperimentalTransformationService(mock_provider, mock_inspection_service)
     
-    preview = await service.generate_preview("hide shorts")
+    from promptdom.design.models import DesignPlan, LayoutStrategy, ContentStrategy, VisualStrategy
+    dummy_plan = DesignPlan(
+        goal="test",
+        layout_strategy=LayoutStrategy(primary_layout="feed", navigation_position="none", content_density="high"),
+        content_strategy=ContentStrategy(remove=[], prioritize=[]),
+        visual_strategy=VisualStrategy(theme="dark", spacing="compact", card_style="flat"),
+        confidence=0.9,
+        reasoning="test"
+    )
+
+    preview = await service.generate_preview("hide shorts", dummy_plan)
     
     assert preview.ui_diff_summary == "- Will hide: Shorts"
     assert preview.transformation.css == ".shorts-container { display: none; }"

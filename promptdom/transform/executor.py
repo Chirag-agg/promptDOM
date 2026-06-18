@@ -1,11 +1,23 @@
+import re
 from ..browser import BrowserManager
+
+def strip_markdown_blocks(text: str) -> str:
+    """Removes ```css ... ``` or ```javascript ... ``` wrappers from LLM output."""
+    if not text:
+        return text
+    # Remove start blocks
+    text = re.sub(r'^```[a-zA-Z]*\n', '', text.strip())
+    # Remove end blocks
+    text = re.sub(r'\n```$', '', text.strip())
+    return text.strip()
 
 class TransformExecutor:
     def __init__(self, browser: BrowserManager):
         self.browser = browser
 
     async def apply_css(self, transformation_id: str, css: str) -> bool:
-        if not css or not css.strip():
+        css = strip_markdown_blocks(css)
+        if not css:
             return False
             
         script = f"""
@@ -29,7 +41,8 @@ class TransformExecutor:
             return False
 
     async def apply_javascript(self, transformation_id: str, javascript: str) -> bool:
-        if not javascript or not javascript.strip():
+        javascript = strip_markdown_blocks(javascript)
+        if not javascript:
             return False
             
         script = f"""
