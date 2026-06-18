@@ -5,7 +5,7 @@ from .inspection.exceptions import BrowserUnavailableError, NoActivePageError, P
 
 
 class BrowserManager:
-    def __init__(self, debugging_url: str = "http://localhost:9222"):
+    def __init__(self, debugging_url: str = "http://127.0.0.1:9222"):
         self.debugging_url = debugging_url
         self.playwright = None
         self.browser: Optional[Browser] = None
@@ -47,7 +47,12 @@ class BrowserManager:
             await self.initialize()
 
         if not self.context or not self.context.pages:
-            raise BrowserUnavailableError("No active context available")
+            self._initialized = False
+            await self.cleanup()
+            await self.initialize()
+            if not self.context or not self.context.pages:
+                self._initialized = False
+                raise BrowserUnavailableError("No active context available")
 
         target_page = None
         
@@ -77,6 +82,15 @@ class BrowserManager:
              raise PageClosedError("Active page is closed")
 
         return target_page
+
+    async def take_screenshot(self, full_page: bool = True) -> bytes:
+        """Capture a screenshot of the active page"""
+        target_page = await self.get_active_page()
+        try:
+            return await target_page.screenshot(full_page=full_page, animations="disabled", timeout=15000)
+        except Exception as e:
+            print(f"Screenshot failed: {e}. Retrying with full_page=False...")
+            return await target_page.screenshot(full_page=False, animations="disabled", timeout=15000)
 
     async def execute_js(self, script: str):
         """Execute JavaScript on the active page"""

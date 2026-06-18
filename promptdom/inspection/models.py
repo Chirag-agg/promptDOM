@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List
 
 class PageHeading(BaseModel):
@@ -82,9 +82,12 @@ class InspectionResponse(BaseModel):
     summary: DOMSummary
 
 class CompactInspectionResponse(BaseModel):
+    url: str = ""
     title: str
     page_type: str
     sections: List[PageSection]
+    buttons: List[PageButton] = Field(default_factory=list)
+    links: List[PageLink] = Field(default_factory=list)
     visible_text_sample: str
 
 class ResolutionInspectionResponse(BaseModel):
