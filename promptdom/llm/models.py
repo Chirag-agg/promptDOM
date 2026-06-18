@@ -7,6 +7,8 @@ class ProviderCapabilities(BaseModel):
     supports_tools: bool
     supports_vision: bool
     supports_system_prompt: bool
+    max_image_count: int = 0
+    max_image_size_mb: float = 0.0
 
 class LLMResponse(BaseModel):
     content: str

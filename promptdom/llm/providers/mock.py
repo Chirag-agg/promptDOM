@@ -30,7 +30,9 @@ class MockProvider(BaseLLMProvider):
             supports_json_mode=True,
             supports_tools=False,
             supports_vision=False,
-            supports_system_prompt=True
+            supports_system_prompt=True,
+            max_image_count=0,
+            max_image_size_mb=0.0
         )
 
     async def generate(
@@ -68,3 +70,14 @@ class MockProvider(BaseLLMProvider):
     ) -> T:
         resp = await self.generate(prompt, system_prompt, temperature, max_tokens)
         return schema.model_validate_json(resp.content)
+
+    async def generate_multimodal_structured(
+        self,
+        prompt: str,
+        images_base64: list[str],
+        schema: Type[T],
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 1000
+    ) -> T:
+        raise NotImplementedError("Mock provider does not support multimodal")

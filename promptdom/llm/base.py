@@ -35,3 +35,18 @@ class BaseLLMProvider(ABC):
         Providers should return an instance of the provided Pydantic schema.
         """
         pass
+
+    @abstractmethod
+    async def generate_multimodal_structured(
+        self,
+        prompt: str,
+        images_base64: list[str],
+        schema: Type[T],
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 1000
+    ) -> T:
+        """
+        Multimodal structured generation.
+        """
+        pass

@@ -20,8 +20,10 @@ class OllamaProvider(BaseLLMProvider):
             supports_streaming=False,
             supports_json_mode=True,
             supports_tools=False,
-            supports_vision=False,
-            supports_system_prompt=True
+            supports_vision=True, # Actually assuming ollama vision models are used if needed
+            supports_system_prompt=True,
+            max_image_count=1,
+            max_image_size_mb=10.0
         )
 
     async def _post(self, endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -100,7 +102,7 @@ class OllamaProvider(BaseLLMProvider):
             "model": self.model_name,
             "prompt": prompt,
             "stream": False,
-            "format": "json",
+            "format": schema.model_json_schema(),
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens
@@ -112,7 +114,53 @@ class OllamaProvider(BaseLLMProvider):
         data = await self._post("generate", payload)
         content = data.get("response", "")
         
+        import json
         try:
-            return schema.model_validate_json(content)
+            parsed = json.loads(content)
+            if "properties" in parsed and isinstance(parsed["properties"], dict):
+                # If the LLM nested the response inside 'properties' due to seeing it in the schema prompt
+                parsed = parsed["properties"]
+            return schema.model_validate(parsed)
         except Exception as e:
             raise ProviderValidationError(f"Failed to parse provider output into schema: {str(e)}\nOutput: {content}")
+
+    async def generate_multimodal_structured(
+        self,
+        prompt: str,
+        images_base64: list[str],
+        schema: Type[T],
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 1000
+    ) -> T:
+        start_time = time.time()
+        
+        schema_json = schema.model_json_schema()
+        enhanced_system = system_prompt or "You are a helpful assistant."
+        enhanced_system += f"\nRespond ONLY in valid JSON matching this schema: {schema_json}"
+        
+        payload = {
+            "model": self.model_name,
+            "prompt": prompt,
+            "images": images_base64,
+            "stream": False,
+            "format": schema.model_json_schema(),
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens
+            }
+        }
+        if enhanced_system:
+            payload["system"] = enhanced_system
+            
+        data = await self._post("generate", payload)
+        content = data.get("response", "")
+        
+        import json
+        try:
+            parsed = json.loads(content)
+            if "properties" in parsed and isinstance(parsed["properties"], dict):
+                parsed = parsed["properties"]
+            return schema.model_validate(parsed)
+        except Exception as e:
+            raise ProviderValidationError(f"Failed to parse multimodal provider output into schema: {str(e)}\nOutput: {content}")
