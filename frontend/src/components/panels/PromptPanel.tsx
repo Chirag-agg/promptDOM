@@ -10,6 +10,7 @@ import { ExecutionCard } from '../design/ExecutionCard';
 import { ConfidenceMeter } from '../design/ConfidenceMeter';
 import { ReferenceImageUploader } from '../reference/ReferenceImageUploader';
 import { ReferenceImageGallery } from '../reference/ReferenceImageGallery';
+import { studioApi } from '../../api/client';
 
 export function PromptPanel({ 
   state, 
@@ -35,13 +36,30 @@ export function PromptPanel({
     estimatedRisk: 'Medium'
   } : null;
 
-  const handleUpload = (image: ReferenceImage) => {
-    const newImages = [...state.referenceImages, image];
-    onStateUpdate?.({
-      referenceImages: newImages,
-      // Auto-select the first uploaded image
-      selectedReferenceId: state.selectedReferenceId || image.id
-    });
+  const handleUpload = async (image: ReferenceImage) => {
+    try {
+      // Create a temporary object URL for immediate display
+      const newImages = [...state.referenceImages, image];
+      onStateUpdate?.({
+        referenceImages: newImages,
+        selectedReferenceId: state.selectedReferenceId || image.id
+      });
+
+      // Upload to backend
+      const response = await studioApi.uploadReference(image.file);
+      
+      // Update the ID to match the backend reference_id
+      onStateUpdate?.({
+        referenceImages: state.referenceImages.map(img => 
+          img.id === image.id ? { ...img, id: response.reference_id } : img
+        ),
+        selectedReferenceId: state.selectedReferenceId === image.id || !state.selectedReferenceId 
+          ? response.reference_id 
+          : state.selectedReferenceId
+      });
+    } catch (err) {
+      console.error("Failed to upload reference:", err);
+    }
   };
 
   const handleRemove = (id: string) => {

@@ -709,6 +709,38 @@ async def create_feature_from_prompt(request: FromPromptRequest):
 
 
 from fastapi.responses import Response, JSONResponse
+from fastapi import UploadFile, File
+import os
+import uuid
+from PIL import Image
+import io
+
+@app.post("/reference/upload")
+async def upload_reference(file: UploadFile = File(...)):
+    """Uploads a reference image to use as a target for redesigns."""
+    try:
+        content = await file.read()
+        
+        # Open image to get dimensions and validate
+        img = Image.open(io.BytesIO(content))
+        width, height = img.size
+        
+        # Save file
+        os.makedirs("data/references", exist_ok=True)
+        reference_id = str(uuid.uuid4())
+        ext = file.filename.split('.')[-1] if '.' in file.filename else 'png'
+        file_path = f"data/references/{reference_id}.{ext}"
+        
+        with open(file_path, "wb") as f:
+            f.write(content)
+            
+        return {
+            "reference_id": reference_id,
+            "width": width,
+            "height": height
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"detail": f"Failed to upload reference: {str(e)}"})
 
 @app.get("/browser/screenshot")
 async def get_screenshot():

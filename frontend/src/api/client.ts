@@ -22,9 +22,27 @@ export const apiClient = {
     }
     return response.json();
   },
+
+  uploadReferenceImage: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE_URL}/reference/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Upload Error: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
 };
 
 export const studioApi = {
-  transformTest: (prompt: string) => 
-    apiClient.post('/transform/test', { prompt }),
+  transformTest: (prompt: string, referenceId?: string) => 
+    apiClient.post('/transform/test', { prompt, reference_id: referenceId }),
+  uploadReference: (file: File) =>
+    apiClient.uploadReferenceImage(file),
 };

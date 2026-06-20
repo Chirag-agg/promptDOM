@@ -19,8 +19,12 @@ export function StudioPage() {
   const handleRun = async (prompt: string) => {
     setState(prev => ({ ...prev, prompt, isProcessing: true, error: null }));
     try {
-      const response = await studioApi.transformTest(prompt);
-      setState(prev => ({ ...prev, isProcessing: false, result: response }));
+      const response = await studioApi.transformTest(prompt, state.selectedReferenceId);
+      setState(prev => ({ 
+        ...prev, 
+        isProcessing: false,
+        result: response
+      }));
     } catch (err: any) {
       setState(prev => ({ ...prev, isProcessing: false, error: err.message }));
     }

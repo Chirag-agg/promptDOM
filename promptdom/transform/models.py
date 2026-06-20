@@ -3,6 +3,7 @@ from typing import List, Optional
 
 class TransformationRequest(BaseModel):
     prompt: str
+    reference_id: Optional[str] = None
 
 class GeneratedTransformation(BaseModel):
     css: str
