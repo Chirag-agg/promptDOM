@@ -44,8 +44,13 @@ from .compiler.models import FeatureSpec
 from .planning.feature_spec_planner import FeatureSpecPlanner
 
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+import os
 
 app = FastAPI(title="PromptDOM", description="Local-first browser automation via natural language")
+
+os.makedirs("data", exist_ok=True)
+app.mount("/data", StaticFiles(directory="data"), name="data")
 
 app.add_middleware(
     CORSMiddleware,
@@ -108,6 +113,9 @@ goal_analyzer = GoalAnalyzerService(llm_provider)
 evaluator = EvaluatorService(designer_provider)
 redesign_repair_service = RedesignRepairService(semantic_resolver)
 
+from .history.service import HistoryService
+history_service = HistoryService()
+
 redesign_orchestrator = RedesignOrchestrator(
     browser=browser_manager,
     inspection_service=inspection_service,
@@ -117,7 +125,8 @@ redesign_orchestrator = RedesignOrchestrator(
     goal_analyzer=goal_analyzer,
     evaluator=evaluator,
     repair_service=redesign_repair_service,
-    design_planner=design_planner
+    design_planner=design_planner,
+    history_service=history_service
 )
 
 auto_apply_service = AutoApplyService(
@@ -408,6 +417,22 @@ async def apply_transformation_plan(request: ApplyRedesignRequest):
         return await redesign_orchestrator.apply_redesign(request.prompt, request.design_plan)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+from .history.models import TransformationHistoryRecord
+
+@app.get("/history", response_model=list[TransformationHistoryRecord])
+async def list_history():
+    try:
+        return history_service.list_records()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/history/{run_id}", response_model=TransformationHistoryRecord)
+async def get_history_record(run_id: str):
+    record = history_service.get_record(run_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found")
+    return record
 
 @app.post("/runtime/features/{instance_id}/stop")
 async def stop_runtime_feature(instance_id: str):

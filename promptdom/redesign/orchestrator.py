@@ -24,7 +24,8 @@ class RedesignOrchestrator:
         goal_analyzer: GoalAnalyzerService,
         evaluator: EvaluatorService,
         repair_service: RedesignRepairService,
-        design_planner: DesignPlanner
+        design_planner: DesignPlanner,
+        history_service=None
     ):
         self.browser = browser
         self.inspection_service = inspection_service
@@ -35,6 +36,7 @@ class RedesignOrchestrator:
         self.evaluator = evaluator
         self.repair_service = repair_service
         self.design_planner = design_planner
+        self.history_service = history_service
         self.max_iterations = 3
         self.min_improvement = 0.05
 
@@ -52,6 +54,7 @@ class RedesignOrchestrator:
         
         # Capture Initial State again
         initial_visual = await self.visual_service.capture_context()
+        initial_dom = await self.inspection_service.inspect_compact()
         
         # Step 3: Initial Transformation
         preview = await self.transform_service.generate_preview(prompt, design_plan, initial_visual)
@@ -126,16 +129,73 @@ class RedesignOrchestrator:
                 success=False
             ))
             
+        # Determine status
+        status = "FAILED"
+        if records and records[-1].success:
+            status = "SUCCESS"
+        elif last_confidence > 0.4:
+            status = "PARTIAL"
+            
         # Update preview with final aggregated code
         preview.transformation.css = current_css
         preview.transformation.javascript = current_js
         
+        # We need final dom state for objective metrics
+        final_dom = await self.inspection_service.inspect_compact()
+
+        # Calculate dummy metrics for now or do actual count
+        objective_metrics = {
+            "dom_nodes_removed": len(initial_dom.sections) - len(final_dom.sections),
+            "dom_nodes_added": len(final_dom.sections) - len(initial_dom.sections) if len(final_dom.sections) > len(initial_dom.sections) else 0,
+            "dom_nodes_changed": len(preview.transformation.affected_elements)
+        }
+        
+        # Final evaluation fallback
+        final_feedback = records[-1].feedback if records else "No evaluation generated."
+
+        # Save to history if history service is available
+        from ..history.models import TransformationHistoryRecord
+        import uuid
+        
+        run_id = f"run_{uuid.uuid4().hex[:8]}"
+        
+        if hasattr(self, 'history_service') and self.history_service:
+            record = TransformationHistoryRecord(
+                run_id=run_id,
+                prompt=prompt,
+                site=initial_visual.page_context.url,
+                status=status,
+                reference_id=None, # Passed down if available, not currently in orchestrator args
+                design_plan=design_plan,
+                css=current_css,
+                javascript=current_js,
+                before_screenshot_path=initial_visual.visual_context.screenshot_path,
+                after_screenshot_path=new_visual.visual_context.screenshot_path if 'new_visual' in locals() else initial_visual.visual_context.screenshot_path,
+                objective_metrics=objective_metrics,
+                iterations=records,
+                diff_summary=final_feedback
+            )
+            self.history_service.save_record(record)
+            
+            before_screenshot_path = record.before_screenshot_path
+            after_screenshot_path = record.after_screenshot_path
+            reference_screenshot_path = record.reference_screenshot_path
+        else:
+            before_screenshot_path = initial_visual.visual_context.screenshot_path
+            after_screenshot_path = new_visual.visual_context.screenshot_path if 'new_visual' in locals() else initial_visual.visual_context.screenshot_path
+            reference_screenshot_path = None
+        
         execution = TransformExecutionResult(
             transformation_id=preview.transformation_id,
-            success=True,
+            success=status == "SUCCESS",
             applied_css=True,
             applied_javascript=True,
-            message=f"Redesign completed after {len(records)} iterations."
+            message=f"Redesign completed after {len(records)} iterations. Status: {status}",
+            before_screenshot_path=f"/data/history/{run_id}/before.png" if self.history_service else f"/{before_screenshot_path}",
+            after_screenshot_path=f"/data/history/{run_id}/after.png" if self.history_service else f"/{after_screenshot_path}",
+            reference_screenshot_path=f"/data/history/{run_id}/reference.png" if self.history_service and reference_screenshot_path else None,
+            objective_metrics=objective_metrics,
+            diff_summary=final_feedback
         )
         
         return TransformTestResponse(

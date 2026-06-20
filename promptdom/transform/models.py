@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import List, Optional
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
 
 class TransformationRequest(BaseModel):
     prompt: str
@@ -42,6 +42,13 @@ class TransformExecutionResult(BaseModel):
     applied_css: bool
     applied_javascript: bool
     message: str
+    
+    before_screenshot_path: str = ""
+    after_screenshot_path: str = ""
+    reference_screenshot_path: Optional[str] = None
+    
+    objective_metrics: Dict[str, Any] = Field(default_factory=dict)
+    diff_summary: str = ""
 
 class TransformTestResponse(BaseModel):
     preview: TransformationPreviewResponse

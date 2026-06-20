@@ -49,4 +49,8 @@ export const studioApi = {
     apiClient.post('/transform/apply', { prompt, design_plan: designPlan, reference_id: referenceId }),
   uploadReference: (file: File) =>
     apiClient.uploadReferenceImage(file),
+  getHistory: () =>
+    apiClient.get('/history'),
+  getHistoryRecord: (runId: string) =>
+    apiClient.get(`/history/${runId}`),
 };

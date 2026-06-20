@@ -1,5 +1,5 @@
 import { Play, Loader2, Target } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { StudioState, ReferenceImage } from '../../state/studio';
 import { GoalCard } from '../design/GoalCard';
 import { LayoutCard } from '../design/LayoutCard';
@@ -11,6 +11,8 @@ import { ConfidenceMeter } from '../design/ConfidenceMeter';
 import { ReviewChangesCard } from '../design/ReviewChangesCard';
 import { ReferenceImageUploader } from '../reference/ReferenceImageUploader';
 import { ReferenceImageGallery } from '../reference/ReferenceImageGallery';
+import { VisualDiffViewer } from '../diff/VisualDiffViewer';
+import { HistoryBrowser } from '../history/HistoryBrowser';
 import { studioApi } from '../../api/client';
 
 export function PromptPanel({ 
@@ -25,10 +27,18 @@ export function PromptPanel({
   onStateUpdate?: (updates: Partial<StudioState>) => void
 }) {
   const [prompt, setPrompt] = useState(state.prompt);
-  const [activeTab, setActiveTab] = useState<'prompt' | 'design' | 'reference'>('prompt');
+  const [activeTab, setActiveTab] = useState<'prompt' | 'design' | 'diff' | 'reference' | 'history'>('prompt');
+  
+  const [selectedHistoryRecord, setSelectedHistoryRecord] = useState<any | null>(null);
 
   const result = state.result;
   const designPlan = state.designPlan || result?.design_plan;
+  
+  useEffect(() => {
+    if (result?.execution && !state.isProcessing) {
+      setActiveTab('diff');
+    }
+  }, [result?.execution, state.isProcessing]);
 
   // Mock critique and execution stats since backend doesn't return them directly yet
   const executionStats = result ? {
@@ -81,13 +91,40 @@ export function PromptPanel({
     onStateUpdate?.({ selectedReferenceId: id });
   };
 
+  const loadHistoryRecord = async (runId: string) => {
+    try {
+      const record = await studioApi.getHistoryRecord(runId);
+      setSelectedHistoryRecord(record);
+      // Construct a mock execution result to pass into DiffViewer
+      const mockExecution = {
+        before_screenshot_path: record.before_screenshot_path,
+        after_screenshot_path: record.after_screenshot_path,
+        reference_screenshot_path: record.reference_screenshot_path,
+        objective_metrics: record.objective_metrics,
+        diff_summary: record.diff_summary,
+        success: record.status === 'SUCCESS'
+      };
+      // We can just show diff directly
+      onStateUpdate?.({
+        result: { execution: mockExecution },
+        designPlan: record.design_plan,
+        prompt: record.prompt
+      });
+      setActiveTab('diff');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full w-full bg-slate-900 border-x border-slate-800 shadow-xl z-10">
       <div className="border-b border-slate-800 bg-slate-900 shrink-0">
-        <div className="flex space-x-1 px-2 pt-2">
+        <div className="flex space-x-1 px-2 pt-2 overflow-x-auto custom-scrollbar">
           <Tab active={activeTab === 'prompt'} onClick={() => setActiveTab('prompt')}>Prompt</Tab>
           <Tab active={activeTab === 'design'} onClick={() => setActiveTab('design')} disabled={!designPlan}>Review Changes</Tab>
+          <Tab active={activeTab === 'diff'} onClick={() => setActiveTab('diff')} disabled={!result?.execution}>Visual Diff</Tab>
           <Tab active={activeTab === 'reference'} onClick={() => setActiveTab('reference')}>Reference Images</Tab>
+          <Tab active={activeTab === 'history'} onClick={() => setActiveTab('history')}>History</Tab>
         </div>
       </div>
 
@@ -170,6 +207,18 @@ export function PromptPanel({
                 onRemove={handleRemove}
               />
             </div>
+          </div>
+        )}
+
+        {activeTab === 'diff' && result?.execution && (
+          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+            <VisualDiffViewer execution={result.execution} />
+          </div>
+        )}
+
+        {activeTab === 'history' && (
+          <div className="flex-1 overflow-y-auto flex flex-col">
+            <HistoryBrowser onSelectRecord={loadHistoryRecord} />
           </div>
         )}
       </div>
