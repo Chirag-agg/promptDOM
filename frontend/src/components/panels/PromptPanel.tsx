@@ -8,24 +8,27 @@ import { VisualCard } from '../design/VisualCard';
 import { CritiqueCard } from '../design/CritiqueCard';
 import { ExecutionCard } from '../design/ExecutionCard';
 import { ConfidenceMeter } from '../design/ConfidenceMeter';
+import { ReviewChangesCard } from '../design/ReviewChangesCard';
 import { ReferenceImageUploader } from '../reference/ReferenceImageUploader';
 import { ReferenceImageGallery } from '../reference/ReferenceImageGallery';
 import { studioApi } from '../../api/client';
 
 export function PromptPanel({ 
   state, 
-  onRun,
+  onGenerate,
+  onApply,
   onStateUpdate 
 }: { 
   state: StudioState, 
-  onRun: (prompt: string) => void,
+  onGenerate: (prompt: string) => void,
+  onApply: () => void,
   onStateUpdate?: (updates: Partial<StudioState>) => void
 }) {
   const [prompt, setPrompt] = useState(state.prompt);
   const [activeTab, setActiveTab] = useState<'prompt' | 'design' | 'reference'>('prompt');
 
   const result = state.result;
-  const designPlan = result?.design_plan;
+  const designPlan = state.designPlan || result?.design_plan;
 
   // Mock critique and execution stats since backend doesn't return them directly yet
   const executionStats = result ? {
@@ -83,7 +86,7 @@ export function PromptPanel({
       <div className="border-b border-slate-800 bg-slate-900 shrink-0">
         <div className="flex space-x-1 px-2 pt-2">
           <Tab active={activeTab === 'prompt'} onClick={() => setActiveTab('prompt')}>Prompt</Tab>
-          <Tab active={activeTab === 'design'} onClick={() => setActiveTab('design')} disabled={!designPlan}>Design Plan</Tab>
+          <Tab active={activeTab === 'design'} onClick={() => setActiveTab('design')} disabled={!designPlan}>Review Changes</Tab>
           <Tab active={activeTab === 'reference'} onClick={() => setActiveTab('reference')}>Reference Images</Tab>
         </div>
       </div>
@@ -108,21 +111,33 @@ export function PromptPanel({
                   </div>
                 )}
               </div>
-              <button 
-                onClick={() => onRun(prompt)}
-                disabled={state.isProcessing || !prompt.trim()}
-                className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-400 text-white px-6 py-2 rounded-lg font-medium transition-colors shadow-lg shadow-blue-900/20 active:scale-95"
-              >
-                <span>{state.isProcessing ? 'Running...' : 'Run Redesign'}</span>
-                {state.isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} fill="currentColor" />}
-              </button>
+              <div className="flex space-x-3">
+                <button 
+                  onClick={() => onGenerate(prompt)}
+                  disabled={state.isProcessing || !prompt.trim()}
+                  className="flex items-center space-x-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 text-white px-6 py-2 rounded-lg font-medium transition-colors border border-slate-600"
+                >
+                  <span>{state.isProcessing && !state.designPlan ? 'Thinking...' : 'Generate Plan'}</span>
+                  {state.isProcessing && !state.designPlan ? <Loader2 size={16} className="animate-spin" /> : null}
+                </button>
+                <button 
+                  onClick={onApply}
+                  disabled={state.isProcessing || !state.designPlan}
+                  className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:border-slate-700 disabled:shadow-none text-white px-6 py-2 rounded-lg font-medium transition-colors shadow-lg shadow-blue-900/20 active:scale-95 border border-blue-500"
+                >
+                  <span>{state.isProcessing && state.designPlan ? 'Applying...' : 'Apply Redesign'}</span>
+                  {state.isProcessing && state.designPlan ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} fill="currentColor" />}
+                </button>
+              </div>
             </div>
           </div>
         )}
 
         {activeTab === 'design' && designPlan && (
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar pb-4">
             <GoalCard goal={designPlan.goal} reasoning={designPlan.reasoning} />
+            
+            <ReviewChangesCard changes={designPlan.changes} />
             
             <div className="grid grid-cols-2 gap-4">
               <LayoutCard layout={designPlan.layout_strategy} />

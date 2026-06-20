@@ -11,6 +11,7 @@ from .repair import RedesignRepairService
 from .models import IterationContext, IterationRecord, GoalAnalysis
 
 from ..design.service import DesignPlanner
+from ..design.models import DesignPlan
 
 class RedesignOrchestrator:
     def __init__(
@@ -37,16 +38,20 @@ class RedesignOrchestrator:
         self.max_iterations = 3
         self.min_improvement = 0.05
 
-    async def execute_redesign_loop(self, prompt: str) -> TransformTestResponse:
-        # Step 1: Goal Analysis
-        goal = await self.goal_analyzer.analyze(prompt)
-        
+    async def generate_plan(self, prompt: str) -> DesignPlan:
         # Capture Initial State
         initial_visual = await self.visual_service.capture_context()
-        dom_snapshot = await self.inspection_service.inspect_compact()
         
         # Step 2: Design
         design_plan = await self.design_planner.generate_plan(prompt, initial_visual)
+        return design_plan
+
+    async def apply_redesign(self, prompt: str, design_plan: DesignPlan) -> TransformTestResponse:
+        # Step 1: Goal Analysis
+        goal = await self.goal_analyzer.analyze(prompt)
+        
+        # Capture Initial State again
+        initial_visual = await self.visual_service.capture_context()
         
         # Step 3: Initial Transformation
         preview = await self.transform_service.generate_preview(prompt, design_plan, initial_visual)

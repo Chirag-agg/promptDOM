@@ -16,10 +16,25 @@ export function StudioPage() {
     selectedReferenceId: undefined,
   });
 
-  const handleRun = async (prompt: string) => {
-    setState(prev => ({ ...prev, prompt, isProcessing: true, error: null }));
+  const handleGenerate = async (prompt: string) => {
+    setState(prev => ({ ...prev, prompt, isProcessing: true, error: null, designPlan: null, result: null }));
     try {
-      const response = await studioApi.transformTest(prompt, state.selectedReferenceId);
+      const plan = await studioApi.generatePlan(prompt, state.selectedReferenceId);
+      setState(prev => ({ 
+        ...prev, 
+        isProcessing: false,
+        designPlan: plan
+      }));
+    } catch (err: any) {
+      setState(prev => ({ ...prev, isProcessing: false, error: err.message }));
+    }
+  };
+
+  const handleApply = async () => {
+    if (!state.designPlan) return;
+    setState(prev => ({ ...prev, isProcessing: true, error: null }));
+    try {
+      const response = await studioApi.applyRedesign(state.prompt, state.designPlan, state.selectedReferenceId);
       setState(prev => ({ 
         ...prev, 
         isProcessing: false,
@@ -36,7 +51,8 @@ export function StudioPage() {
       centerPanel={
         <PromptPanel 
           state={state} 
-          onRun={handleRun} 
+          onGenerate={handleGenerate} 
+          onApply={handleApply}
           onStateUpdate={(updates) => setState(prev => ({ ...prev, ...updates }))}
         />
       }

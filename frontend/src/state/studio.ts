@@ -13,4 +13,5 @@ export interface StudioState {
   error: string | null;
   referenceImages: ReferenceImage[];
   selectedReferenceId?: string;
+  designPlan?: any | null;
 }

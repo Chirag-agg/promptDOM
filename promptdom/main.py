@@ -301,7 +301,11 @@ async def list_runtime_features():
 async def get_capabilities():
     return capability_registry.list_all()
 
-from .transform.models import TransformationRequest, GeneratedTransformation, TransformationPreviewResponse, TransformExecutionRequest, TransformExecutionResult, TransformTestResponse, TransformFeedbackRequest
+from .transform.models import (
+    TransformationRequest, GeneratedTransformation, TransformationPreviewResponse, 
+    TransformExecutionRequest, TransformExecutionResult, TransformTestResponse, 
+    TransformFeedbackRequest, PlanRequest, ApplyRedesignRequest
+)
 from .analytics.models import TransformFeedbackLog
 
 @app.post("/transform/design", response_model=DesignPlan)
@@ -386,7 +390,22 @@ async def log_transform_feedback(request: TransformFeedbackRequest):
 @app.post("/transform/test", response_model=TransformTestResponse)
 async def test_transformation(request: TransformationRequest):
     try:
-        return await redesign_orchestrator.execute_redesign_loop(request.prompt)
+        plan = await redesign_orchestrator.generate_plan(request.prompt)
+        return await redesign_orchestrator.apply_redesign(request.prompt, plan)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/transform/plan", response_model=DesignPlan)
+async def generate_transformation_plan(request: PlanRequest):
+    try:
+        return await redesign_orchestrator.generate_plan(request.prompt)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/transform/apply", response_model=TransformTestResponse)
+async def apply_transformation_plan(request: ApplyRedesignRequest):
+    try:
+        return await redesign_orchestrator.apply_redesign(request.prompt, request.design_plan)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

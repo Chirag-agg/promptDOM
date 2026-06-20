@@ -43,6 +43,10 @@ export const apiClient = {
 export const studioApi = {
   transformTest: (prompt: string, referenceId?: string) => 
     apiClient.post('/transform/test', { prompt, reference_id: referenceId }),
+  generatePlan: (prompt: string, referenceId?: string) =>
+    apiClient.post('/transform/plan', { prompt, reference_id: referenceId }),
+  applyRedesign: (prompt: string, designPlan: any, referenceId?: string) =>
+    apiClient.post('/transform/apply', { prompt, design_plan: designPlan, reference_id: referenceId }),
   uploadReference: (file: File) =>
     apiClient.uploadReferenceImage(file),
 };

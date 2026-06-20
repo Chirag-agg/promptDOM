@@ -5,6 +5,17 @@ class TransformationRequest(BaseModel):
     prompt: str
     reference_id: Optional[str] = None
 
+class PlanRequest(BaseModel):
+    prompt: str
+    reference_id: Optional[str] = None
+
+from ..design.models import DesignPlan
+
+class ApplyRedesignRequest(BaseModel):
+    prompt: str
+    reference_id: Optional[str] = None
+    design_plan: DesignPlan
+
 class GeneratedTransformation(BaseModel):
     css: str
     javascript: str

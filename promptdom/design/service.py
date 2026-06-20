@@ -24,6 +24,7 @@ class DesignPlanner:
             "The screenshot is the primary source for layout and visual hierarchy.\n"
             "The DOM summary is the primary source for element identification.\n"
             "Analyze the website structure and create a high-level redesign strategy blueprint.\n"
+            "IMPORTANT: While you must provide the layout, content, and visual strategies, you MUST ALSO explicitly break down the redesign into an actionable `changes` array consisting of typed structural instructions (REMOVE, MOVE, RESTYLE, ADD)."
             "Return ONLY a DesignPlan."
         )
         
