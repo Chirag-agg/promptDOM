@@ -43,9 +43,17 @@ from .compiler.compiler import FeatureCompiler
 from .compiler.models import FeatureSpec
 from .planning.feature_spec_planner import FeatureSpecPlanner
 
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="PromptDOM", description="Local-first browser automation via natural language")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # Global instances
 browser_manager = BrowserManager()
 runtime_engine = RuntimeEngine()
