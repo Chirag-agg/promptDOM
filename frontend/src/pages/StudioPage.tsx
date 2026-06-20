@@ -12,6 +12,8 @@ export function StudioPage() {
     isProcessing: false,
     result: null,
     error: null,
+    referenceImages: [],
+    selectedReferenceId: undefined,
   });
 
   const handleRun = async (prompt: string) => {
@@ -27,7 +29,13 @@ export function StudioPage() {
   return (
     <AppLayout
       leftPanel={<BrowserPanel state={state} />}
-      centerPanel={<PromptPanel state={state} onRun={handleRun} />}
+      centerPanel={
+        <PromptPanel 
+          state={state} 
+          onRun={handleRun} 
+          onStateUpdate={(updates) => setState(prev => ({ ...prev, ...updates }))}
+        />
+      }
       rightPanel={<DebugPanel state={state} />}
     />
   );
