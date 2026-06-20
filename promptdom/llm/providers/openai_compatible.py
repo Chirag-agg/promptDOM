@@ -146,7 +146,11 @@ class BaseOpenAICompatibleProvider(BaseLLMProvider):
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
         
         try:
-            return schema.model_validate_json(content)
+            import json
+            parsed = json.loads(content)
+            if "properties" in parsed and isinstance(parsed["properties"], dict) and len(parsed) == 1:
+                parsed = parsed["properties"]
+            return schema.model_validate(parsed)
         except Exception as e:
             raise ProviderValidationError(f"Failed to parse provider output into schema: {str(e)}\nOutput: {content}")
 

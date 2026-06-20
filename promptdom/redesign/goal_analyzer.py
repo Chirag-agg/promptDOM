@@ -15,6 +15,10 @@ Valid Goal Types:
 - REORGANIZE: Moving elements into a different logical order.
 
 Analyze the prompt and output a JSON object matching the requested schema exactly.
+CRITICAL RULES FOR JSON ARRAY:
+- MAXIMUM 3 items in the `secondary_goals` array.
+- DO NOT repeat goals. Every item must be unique.
+- Stop generating after 3 items.
 """
 
     async def analyze(self, prompt: str) -> GoalAnalysis:

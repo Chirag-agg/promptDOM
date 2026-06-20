@@ -58,7 +58,8 @@ class OllamaProvider(BaseLLMProvider):
             "stream": False,
             "options": {
                 "temperature": temperature,
-                "num_predict": max_tokens
+                "num_predict": max_tokens,
+                "num_ctx": 16384
             }
         }
         if system_prompt:
@@ -105,7 +106,8 @@ class OllamaProvider(BaseLLMProvider):
             "format": schema.model_json_schema(),
             "options": {
                 "temperature": temperature,
-                "num_predict": max_tokens
+                "num_predict": max_tokens,
+                "num_ctx": 16384
             }
         }
         if enhanced_system:
@@ -147,7 +149,8 @@ class OllamaProvider(BaseLLMProvider):
             "format": schema.model_json_schema(),
             "options": {
                 "temperature": temperature,
-                "num_predict": max_tokens
+                "num_predict": max_tokens,
+                "num_ctx": 16384
             }
         }
         if enhanced_system:
