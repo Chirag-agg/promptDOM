@@ -38,26 +38,26 @@ export function DebugPanel({ state }: { state: StudioState }) {
 {JSON.stringify({
   primary_goal: "RESTYLE",
   secondary_goals: ["LAYOUT_CHANGE"],
-  reasoning: result.design_plan?.reasoning || "Derived from prompt."
+  reasoning: result.preview?.design_plan?.reasoning || "Derived from prompt."
 }, null, 2)}
               </pre>
             </Accordion>
 
             <Accordion title="Design Plan" defaultOpen={true}>
               <pre className="mono text-xs text-blue-400 bg-slate-900 p-3 rounded-b-lg border-x border-b border-slate-800 overflow-x-auto">
-{JSON.stringify(result.design_plan || {}, null, 2)}
+{JSON.stringify(result.preview?.design_plan || {}, null, 2)}
               </pre>
             </Accordion>
 
             <Accordion title="Generated CSS" defaultOpen={true}>
               <pre className="mono text-xs text-purple-400 bg-slate-900 p-3 rounded-b-lg border-x border-b border-slate-800 overflow-x-auto">
-{result.transformation?.css || "/* No CSS generated */"}
+{result.preview?.transformation?.css || "/* No CSS generated */"}
               </pre>
             </Accordion>
 
             <Accordion title="Generated JavaScript" defaultOpen={false}>
               <pre className="mono text-xs text-yellow-400 bg-slate-900 p-3 rounded-b-lg border-x border-b border-slate-800 overflow-x-auto">
-{result.transformation?.javascript || "// No JS generated"}
+{result.preview?.transformation?.javascript || "// No JS generated"}
               </pre>
             </Accordion>
 
@@ -68,8 +68,8 @@ export function DebugPanel({ state }: { state: StudioState }) {
     iteration: 1,
     success: true,
     feedback: "Transformation completed. Evaluator step disabled in this version.",
-    confidence: result.transformation?.confidence || 0,
-    affected_elements: result.transformation?.affected_elements || []
+    confidence: result.preview?.transformation?.confidence || 0,
+    affected_elements: result.preview?.transformation?.affected_elements || []
   }
 ], null, 2)}
               </pre>

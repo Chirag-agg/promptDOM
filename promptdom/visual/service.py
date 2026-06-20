@@ -11,7 +11,7 @@ class VisualInspectionService:
 
     async def capture_context(self) -> VisualInspectionResponse:
         page_context = await self.inspection_service.inspect_compact()
-        image_bytes = await self.browser_manager.take_screenshot(full_page=True)
+        image_bytes = await self.browser_manager.take_screenshot(full_page=False)
         
         # We assume 1920x1080 if viewport isn't readily available, 
         # or we could get the viewport from the page.

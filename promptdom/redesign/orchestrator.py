@@ -114,7 +114,8 @@ class RedesignOrchestrator:
             
             # Append Patch
             current_css += f"\n/* Patch Iteration {i} */\n{patch.css_patch}"
-            current_js += f"\n/* Patch Iteration {i} */\n{patch.js_patch}"
+            if patch.js_patch and patch.js_patch.strip():
+                current_js += f"\n/* Patch Iteration {i} */\n{{\n{patch.js_patch}\n}}"
             
             selectors_found = []
             for target, cands in grounded_candidates.items():

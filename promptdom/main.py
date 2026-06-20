@@ -116,6 +116,23 @@ redesign_repair_service = RedesignRepairService(semantic_resolver)
 from .history.service import HistoryService
 history_service = HistoryService()
 
+from .capture.storage import CaptureStorage
+from .capture.service import CaptureService
+from .capture.models import SiteSnapshot
+from .capture.analytics import CaptureSummary, CaptureHealth, get_capture_summary, get_capture_health
+from .intelligence.service import IntelligenceService
+from .intelligence.models import WebsiteModel
+from .archetypes.service import ArchetypeService
+from .archetypes.models import ArchetypeResult
+from .knowledge.service import KnowledgeService
+from .knowledge.models import KnowledgePack
+
+capture_storage = CaptureStorage()
+capture_service = CaptureService(browser_manager, capture_storage)
+intelligence_service = IntelligenceService()
+archetype_service = ArchetypeService()
+knowledge_service = KnowledgeService(capture_storage, intelligence_service, archetype_service)
+
 redesign_orchestrator = RedesignOrchestrator(
     browser=browser_manager,
     inspection_service=inspection_service,
@@ -352,22 +369,6 @@ async def generate_transformation_preview(request: TransformationRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/transform/apply", response_model=TransformExecutionResult)
-async def apply_transformation(request: TransformExecutionRequest):
-    preview = experimental_transformation_service.get_preview(request.transformation_id)
-    if not preview:
-        raise HTTPException(status_code=404, detail="Transformation preview not found")
-        
-    css_applied = await transform_executor.apply_css(request.transformation_id, preview.transformation.css)
-    js_applied = await transform_executor.apply_javascript(request.transformation_id, preview.transformation.javascript)
-    
-    return TransformExecutionResult(
-        transformation_id=request.transformation_id,
-        success=True,
-        applied_css=css_applied,
-        applied_javascript=js_applied,
-        message="Transformation applied successfully"
-    )
 
 @app.post("/transform/remove")
 async def remove_transformation(request: TransformExecutionRequest):
@@ -409,6 +410,8 @@ async def generate_transformation_plan(request: PlanRequest):
     try:
         return await redesign_orchestrator.generate_plan(request.prompt)
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/transform/apply", response_model=TransformTestResponse)
@@ -795,6 +798,95 @@ async def get_screenshot():
         return Response(content=screenshot_bytes, media_type="image/png")
     except Exception as e:
         return JSONResponse(status_code=500, content={"detail": f"Failed to capture screenshot: {str(e)}"})
+
+# Capture Endpoints
+@app.get("/capture", response_model=SiteSnapshot)
+async def capture_page():
+    """Capture the current browser page — screenshot, DOM, semantic elements, layout."""
+    try:
+        return await capture_service.capture_current_page()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/capture/list", response_model=list[SiteSnapshot])
+async def list_captures():
+    """List all stored capture snapshots."""
+    return capture_storage.list_snapshots()
+
+@app.get("/capture/{snapshot_id}/summary", response_model=CaptureSummary)
+async def capture_summary(snapshot_id: str):
+    """Return size and count metrics for a capture snapshot."""
+    summary = get_capture_summary(capture_storage, snapshot_id)
+    if not summary:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return summary
+
+@app.get("/capture/{snapshot_id}/health", response_model=CaptureHealth)
+async def capture_health(snapshot_id: str):
+    """Score the quality of a capture and flag potential issues."""
+    health = get_capture_health(capture_storage, snapshot_id)
+    if not health:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return health
+
+@app.get("/capture/{snapshot_id}/export")
+async def capture_export(snapshot_id: str):
+    """Export full snapshot data for downstream consumers (Knowledge Pack Builder)."""
+    snapshot = capture_storage.load_snapshot(snapshot_id)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return {
+        "snapshot": snapshot.model_dump(),
+        "semantic_elements": [el.model_dump() for el in snapshot.semantic_elements],
+        "layout_elements": [el.model_dump() for el in snapshot.layout_elements],
+    }
+
+@app.get("/capture/{snapshot_id}", response_model=SiteSnapshot)
+async def get_capture(snapshot_id: str):
+    """Retrieve a specific capture snapshot by ID."""
+    snapshot = capture_storage.load_snapshot(snapshot_id)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return snapshot
+
+@app.post("/intelligence/{snapshot_id}", response_model=WebsiteModel)
+async def analyze_snapshot(snapshot_id: str):
+    """Analyze a capture snapshot and return a structured website model."""
+    snapshot = capture_storage.load_snapshot(snapshot_id)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return intelligence_service.analyze(snapshot, force=True)
+
+@app.get("/archetype/{snapshot_id}", response_model=ArchetypeResult)
+async def get_archetype(snapshot_id: str):
+    """Detect website archetype from capture data."""
+    snapshot = capture_storage.load_snapshot(snapshot_id)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+        
+    website_model = intelligence_service.analyze(snapshot, force=False)
+    return archetype_service.detect(snapshot, website_model)
+
+@app.post("/knowledge/build/{hostname}", response_model=KnowledgePack)
+async def build_knowledge_pack(hostname: str):
+    """Build a knowledge pack by aggregating all snapshots for a hostname."""
+    pack = knowledge_service.build_pack(hostname)
+    if not pack:
+        raise HTTPException(status_code=404, detail="Not enough snapshots to build knowledge pack")
+    return pack
+
+@app.get("/knowledge/{hostname}", response_model=KnowledgePack)
+async def get_knowledge_pack(hostname: str):
+    """Get an existing knowledge pack."""
+    pack = knowledge_service.get_pack(hostname)
+    if not pack:
+        raise HTTPException(status_code=404, detail="Knowledge pack not found")
+    return pack
+
+@app.get("/knowledge", response_model=list[KnowledgePack])
+async def list_knowledge_packs():
+    """List all available knowledge packs."""
+    return knowledge_service.list_packs()
 
 @app.get("/health")
 async def health_check():

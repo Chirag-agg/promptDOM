@@ -54,9 +54,9 @@ class DOMExtractor:
                 .filter(h => h.text !== '')
                 .slice(0, {self.MAX_HEADINGS});
                 
-            const buttons = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"]'))
+            const buttons = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"], [role="button"]'))
                 .map(el => ({{
-                    text: norm(el.innerText || el.value),
+                    text: norm(el.innerText || el.value || el.title || el.getAttribute('aria-label')),
                     tag: el.tagName.toLowerCase(),
                     ...extractMeta(el)
                 }}))
@@ -72,10 +72,10 @@ class DOMExtractor:
                 }}))
                 .slice(0, {self.MAX_INPUTS});
                 
-            const links = Array.from(document.querySelectorAll('a[href]'))
+            const links = Array.from(document.querySelectorAll('a[href], [role="link"]'))
                 .map(el => ({{
-                    text: norm(el.innerText),
-                    href: el.href,
+                    text: norm(el.innerText || el.title || el.getAttribute('aria-label')),
+                    href: el.href || '',
                     ...extractMeta(el)
                 }}))
                 .filter(l => l.text !== '' && !l.href.startsWith('javascript:'))

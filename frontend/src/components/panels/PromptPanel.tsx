@@ -13,6 +13,8 @@ import { ReferenceImageUploader } from '../reference/ReferenceImageUploader';
 import { ReferenceImageGallery } from '../reference/ReferenceImageGallery';
 import { VisualDiffViewer } from '../diff/VisualDiffViewer';
 import { HistoryBrowser } from '../history/HistoryBrowser';
+import { SnapshotExplorer } from '../capture/SnapshotExplorer';
+import { KnowledgeExplorer } from '../knowledge/KnowledgeExplorer';
 import { studioApi } from '../../api/client';
 
 export function PromptPanel({ 
@@ -27,12 +29,12 @@ export function PromptPanel({
   onStateUpdate?: (updates: Partial<StudioState>) => void
 }) {
   const [prompt, setPrompt] = useState(state.prompt);
-  const [activeTab, setActiveTab] = useState<'prompt' | 'design' | 'diff' | 'reference' | 'history'>('prompt');
+  const [activeTab, setActiveTab] = useState<'prompt' | 'design' | 'diff' | 'reference' | 'history' | 'snapshots' | 'knowledge'>('prompt');
   
   const [selectedHistoryRecord, setSelectedHistoryRecord] = useState<any | null>(null);
 
   const result = state.result;
-  const designPlan = state.designPlan || result?.design_plan;
+  const designPlan = state.designPlan || result?.preview?.design_plan;
   
   useEffect(() => {
     if (result?.execution && !state.isProcessing) {
@@ -42,10 +44,10 @@ export function PromptPanel({
 
   // Mock critique and execution stats since backend doesn't return them directly yet
   const executionStats = result ? {
-    cssLines: result.transformation?.css?.split('\n').length || 0,
-    jsLines: result.transformation?.javascript?.split('\n').length || 0,
-    targetsIdentified: result.transformation?.affected_elements?.length || 0,
-    targetsGrounded: result.transformation?.affected_elements?.length || 0, // Mock
+    cssLines: result.preview?.transformation?.css?.split('\n').length || 0,
+    jsLines: result.preview?.transformation?.javascript?.split('\n').length || 0,
+    targetsIdentified: result.preview?.transformation?.affected_elements?.length || 0,
+    targetsGrounded: result.preview?.transformation?.affected_elements?.length || 0, // Mock
     estimatedRisk: 'Medium'
   } : null;
 
@@ -125,6 +127,8 @@ export function PromptPanel({
           <Tab active={activeTab === 'diff'} onClick={() => setActiveTab('diff')} disabled={!result?.execution}>Visual Diff</Tab>
           <Tab active={activeTab === 'reference'} onClick={() => setActiveTab('reference')}>Reference Images</Tab>
           <Tab active={activeTab === 'history'} onClick={() => setActiveTab('history')}>History</Tab>
+          <Tab active={activeTab === 'snapshots'} onClick={() => setActiveTab('snapshots')}>Snapshots</Tab>
+          <Tab active={activeTab === 'knowledge'} onClick={() => setActiveTab('knowledge')}>Knowledge Base</Tab>
         </div>
       </div>
 
@@ -219,6 +223,18 @@ export function PromptPanel({
         {activeTab === 'history' && (
           <div className="flex-1 overflow-y-auto flex flex-col">
             <HistoryBrowser onSelectRecord={loadHistoryRecord} />
+          </div>
+        )}
+
+        {activeTab === 'snapshots' && (
+          <div className="flex-1 overflow-y-auto flex flex-col">
+            <SnapshotExplorer />
+          </div>
+        )}
+
+        {activeTab === 'knowledge' && (
+          <div className="flex-1 overflow-y-auto flex flex-col">
+            <KnowledgeExplorer />
           </div>
         )}
       </div>

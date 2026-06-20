@@ -53,4 +53,26 @@ export const studioApi = {
     apiClient.get('/history'),
   getHistoryRecord: (runId: string) =>
     apiClient.get(`/history/${runId}`),
+  captureCurrentPage: () =>
+    apiClient.get('/capture'),
+  listCaptures: () =>
+    apiClient.get('/capture/list'),
+  getCapture: (id: string) =>
+    apiClient.get(`/capture/${id}`),
+  getCaptureSummary: (id: string) =>
+    apiClient.get(`/capture/${id}/summary`),
+  getCaptureHealth: (id: string) =>
+    apiClient.get(`/capture/${id}/health`),
+  getCaptureExport: (id: string) =>
+    apiClient.get(`/capture/${id}/export`),
+  analyzeSnapshot: (id: string) =>
+    apiClient.post(`/intelligence/${id}`, {}),
+  getArchetype: (id: string) =>
+    apiClient.get(`/archetype/${id}`),
+  buildKnowledgePack: (hostname: string) =>
+    apiClient.post(`/knowledge/build/${hostname}`, {}),
+  getKnowledgePack: (hostname: string) =>
+    apiClient.get(`/knowledge/${hostname}`),
+  listKnowledgePacks: () =>
+    apiClient.get('/knowledge'),
 };
