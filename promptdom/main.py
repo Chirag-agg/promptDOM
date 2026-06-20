@@ -708,6 +708,18 @@ async def create_feature_from_prompt(request: FromPromptRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+from fastapi.responses import Response, JSONResponse
+
+@app.get("/browser/screenshot")
+async def get_screenshot():
+    """Returns the current screenshot of the active browser page."""
+    try:
+        # Get screenshot bytes
+        screenshot_bytes = await browser_manager.take_screenshot(full_page=False)
+        return Response(content=screenshot_bytes, media_type="image/png")
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"detail": f"Failed to capture screenshot: {str(e)}"})
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""

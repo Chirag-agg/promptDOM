@@ -31,12 +31,12 @@ export function AppLayout({ leftPanel, centerPanel, rightPanel }: AppLayoutProps
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel */}
-        <div className="w-[30%] h-full border-r border-slate-800 bg-slate-900 flex flex-col relative z-10">
+        <div className="w-[40%] h-full border-r border-slate-800 bg-slate-900 flex flex-col relative z-10">
           {leftPanel}
         </div>
 
         {/* Center Panel */}
-        <div className="w-[40%] h-full flex flex-col bg-slate-800 shadow-2xl z-20">
+        <div className="w-[30%] h-full flex flex-col bg-slate-800 shadow-2xl z-20">
           {centerPanel}
         </div>
 
