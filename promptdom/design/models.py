@@ -34,12 +34,18 @@ class AddChange(BaseModel):
     target: str = Field(description="The logical element to add or inject")
     description: str = Field(description="Description of what to add")
 
+class PrioritizeChange(BaseModel):
+    type: Literal["PRIORITIZE"]
+    target: str = Field(description="The logical element to prioritize")
+    description: str = Field(description="Description of how to prioritize it")
+
 DesignChange = Annotated[
     Union[
         RemoveChange,
         MoveChange,
         RestyleChange,
         AddChange,
+        PrioritizeChange,
     ],
     Field(discriminator="type")
 ]
