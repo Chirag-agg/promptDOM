@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Any
 
 
 class Bounds(BaseModel):
@@ -24,6 +25,13 @@ class ConceptKnowledge(BaseModel):
     frequency: float
 
 
+class PageVariantKnowledge(BaseModel):
+    variant: str
+    concepts: list[str]
+    regions: list[str]
+    frequency: float
+
+
 class KnowledgePack(BaseModel):
     pack_id: str
 
@@ -34,8 +42,10 @@ class KnowledgePack(BaseModel):
     region_knowledge: list[RegionKnowledge]
     concept_knowledge: list[ConceptKnowledge]
 
-    page_variants: list[str]
+    page_variants: list[PageVariantKnowledge]
     snapshots_used: list[str]
+
+    graph: Any | None = None
 
     knowledge_confidence: float
     generated_at: str
