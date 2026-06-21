@@ -1,4 +1,4 @@
-import { ArrowLeft, Network, Box, TextSearch, Tag, Layers } from 'lucide-react';
+import { ArrowLeft, Network, Box, TextSearch, Tag, Layers, Share2 } from 'lucide-react';
 
 interface KnowledgeDetailsProps {
   pack: any;
@@ -124,6 +124,28 @@ export function KnowledgeDetails({ pack, onBack }: KnowledgeDetailsProps) {
             ))}
           </div>
         </div>
+
+        {/* Relational Memory (Graph) */}
+        {pack.graph && pack.graph.triples && pack.graph.triples.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest flex items-center space-x-2">
+              <Share2 size={12} />
+              <span>Relational Memory</span>
+            </h3>
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col space-y-3">
+              {pack.graph.triples.map((t: any, i: number) => (
+                <div key={i} className="flex items-center space-x-2 text-xs border-b border-slate-800/50 pb-2 last:border-0 last:pb-0">
+                  <span className="font-bold text-slate-300 w-1/3 truncate text-right">{t.source}</span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-[10px] text-emerald-400 font-mono tracking-widest border border-emerald-500/20 shrink-0">
+                    {t.relation.replace('_', ' ')}
+                  </span>
+                  <span className="font-bold text-slate-300 w-1/3 truncate">{t.target}</span>
+                  <span className="text-[10px] text-slate-500 ml-auto mono">{(t.confidence * 100).toFixed(0)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

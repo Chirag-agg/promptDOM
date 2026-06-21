@@ -121,7 +121,7 @@ export function PromptPanel({
   return (
     <div className="flex flex-col h-full w-full bg-slate-900 border-x border-slate-800 shadow-xl z-10">
       <div className="border-b border-slate-800 bg-slate-900 shrink-0">
-        <div className="flex space-x-1 px-2 pt-2 overflow-x-auto custom-scrollbar">
+        <div className="flex flex-wrap gap-1 px-2 pt-2 pb-1">
           <Tab active={activeTab === 'prompt'} onClick={() => setActiveTab('prompt')}>Prompt</Tab>
           <Tab active={activeTab === 'design'} onClick={() => setActiveTab('design')} disabled={!designPlan}>Review Changes</Tab>
           <Tab active={activeTab === 'diff'} onClick={() => setActiveTab('diff')} disabled={!result?.execution}>Visual Diff</Tab>
