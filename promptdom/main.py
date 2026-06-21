@@ -1,4 +1,9 @@
+import sys
 import asyncio
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -403,6 +408,8 @@ async def test_transformation(request: TransformationRequest):
         plan = await redesign_orchestrator.generate_plan(request.prompt)
         return await redesign_orchestrator.apply_redesign(request.prompt, plan)
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/transform/plan", response_model=DesignPlan)
@@ -419,6 +426,8 @@ async def apply_transformation_plan(request: ApplyRedesignRequest):
     try:
         return await redesign_orchestrator.apply_redesign(request.prompt, request.design_plan)
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 from .history.models import TransformationHistoryRecord
@@ -798,6 +807,46 @@ async def get_screenshot():
         return Response(content=screenshot_bytes, media_type="image/png")
     except Exception as e:
         return JSONResponse(status_code=500, content={"detail": f"Failed to capture screenshot: {str(e)}"})
+
+# --- Intelligence Endpoints ---
+@app.post("/intelligence/{id}")
+async def analyze_snapshot(id: str):
+    s = capture_service.get_snapshot(id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return intelligence_service.analyze(s)
+
+# --- Archetype Endpoints ---
+@app.get("/archetype/{id}")
+async def get_archetype_for_snapshot(id: str):
+    s = capture_service.get_snapshot(id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    model = intelligence_service.analyze(s)
+    return archetype_service.detect(model)
+
+# --- Knowledge Endpoints ---
+@app.get("/knowledge")
+async def list_knowledge_packs():
+    return knowledge_service.list_packs()
+
+@app.post("/knowledge/build/{hostname}")
+async def build_knowledge_pack(hostname: str):
+    try:
+        return knowledge_service.build_pack(hostname)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/knowledge/{hostname}")
+async def get_knowledge_pack(hostname: str):
+    pack = knowledge_service.get_pack(hostname)
+    if not pack:
+        raise HTTPException(status_code=404, detail="Pack not found")
+    return pack
 
 # Capture Endpoints
 @app.get("/capture", response_model=SiteSnapshot)
