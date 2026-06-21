@@ -68,8 +68,36 @@ class MockProvider(BaseLLMProvider):
         temperature: float = 0.0,
         max_tokens: int = 1000
     ) -> T:
-        resp = await self.generate(prompt, system_prompt, temperature, max_tokens)
-        return schema.model_validate_json(resp.content)
+        try:
+            resp = await self.generate(prompt, system_prompt, temperature, max_tokens)
+            return schema.model_validate_json(resp.content)
+        except ValueError as e:
+            if str(e) == "prompt_not_in_dataset" and schema.__name__ == "DesignPlan":
+                mock_design = {
+                    "goal": f"Generic Mock Redesign based on: '{prompt}'",
+                    "layout_strategy": {
+                        "primary_layout": "clean_minimalist",
+                        "navigation_position": "left_sidebar",
+                        "content_density": "spacious"
+                    },
+                    "content_strategy": {
+                        "remove": ["Clutter", "Ads"],
+                        "prioritize": ["Main Content"]
+                    },
+                    "visual_strategy": {
+                        "theme": "sleek_dark",
+                        "spacing": "generous",
+                        "card_style": "elevated"
+                    },
+                    "changes": [
+                        {"type": "REMOVE", "target": "Annoying Banner"},
+                        {"type": "RESTYLE", "target": "Main Video", "style_goal": "Make it cinematic"}
+                    ],
+                    "confidence": 0.85,
+                    "reasoning": "Since this is the Mock LLM provider, this is a placeholder redesign plan. Set PROMPTDOM_LLM_PROVIDER=OLLAMA in your .env file to use a real AI model."
+                }
+                return schema.model_validate(mock_design)
+            raise e
 
     async def generate_multimodal_structured(
         self,
