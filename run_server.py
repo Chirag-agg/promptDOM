@@ -9,7 +9,6 @@ if sys.platform == 'win32':
 if __name__ == "__main__":
     # Configure LLM Provider explicitly as requested
     os.environ["PROMPTDOM_LLM_PROVIDER"] = "NVIDIA"
-    os.environ["PROMPTDOM_LLM_NVIDIA_API_KEY"] = "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"
     
     # The Coder model (CSS/JS generation)
     os.environ["PROMPTDOM_LLM_MODEL"] = "meta/llama-3.1-405b-instruct"
