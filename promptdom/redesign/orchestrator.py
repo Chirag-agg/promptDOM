@@ -2,16 +2,17 @@ from typing import Optional
 from ..browser import BrowserManager
 from ..inspection.service import InspectionService
 from ..visual.service import VisualInspectionService
-from ..transform.service import ExperimentalTransformationService
 from ..transform.executor import TransformExecutor
 from ..transform.models import TransformTestResponse, TransformExecutionResult
-from .goal_analyzer import GoalAnalyzerService
-from .evaluator import EvaluatorService
-from .repair import RedesignRepairService
-from .models import IterationContext, IterationRecord, GoalAnalysis
+from .models import IterationContext, IterationRecord
 
-from ..design.service import DesignPlanner
-from ..design.models import DesignPlan
+from ..intent.interpreter import IntentInterpreterService
+from ..knowledge.query import GraphQueryEngine
+from ..planning.impact_analyzer import ImpactAnalyzerService
+from ..planning.transformation_planner import TransformationPlannerService
+from ..transform.engineer import CSSJSEngineerService
+from ..knowledge.service import KnowledgeService
+from ..intent.models import PipelineTrace
 
 class RedesignOrchestrator:
     def __init__(
@@ -19,187 +20,141 @@ class RedesignOrchestrator:
         browser: BrowserManager,
         inspection_service: InspectionService,
         visual_service: VisualInspectionService,
-        transform_service: ExperimentalTransformationService,
         transform_executor: TransformExecutor,
-        goal_analyzer: GoalAnalyzerService,
-        evaluator: EvaluatorService,
-        repair_service: RedesignRepairService,
-        design_planner: DesignPlanner,
+        intent_interpreter: IntentInterpreterService,
+        graph_query_engine: GraphQueryEngine,
+        impact_analyzer: ImpactAnalyzerService,
+        transformation_planner: TransformationPlannerService,
+        css_js_engineer: CSSJSEngineerService,
+        knowledge_service: KnowledgeService,
         history_service=None
     ):
         self.browser = browser
         self.inspection_service = inspection_service
         self.visual_service = visual_service
-        self.transform_service = transform_service
         self.transform_executor = transform_executor
-        self.goal_analyzer = goal_analyzer
-        self.evaluator = evaluator
-        self.repair_service = repair_service
-        self.design_planner = design_planner
+        
+        self.intent_interpreter = intent_interpreter
+        self.graph_query_engine = graph_query_engine
+        self.impact_analyzer = impact_analyzer
+        self.transformation_planner = transformation_planner
+        
+        from ..planning.cross_site_planner import CrossSitePlannerService
+        self.cross_site_planner = CrossSitePlannerService(self.transformation_planner.provider)
+        
+        from ..utils.domain import DomainResolver
+        self.domain_resolver = DomainResolver()
+        
+        self.css_js_engineer = css_js_engineer
+        self.knowledge_service = knowledge_service
+        
         self.history_service = history_service
         self.max_iterations = 3
         self.min_improvement = 0.05
 
-    async def generate_plan(self, prompt: str) -> DesignPlan:
-        # Capture Initial State
-        initial_visual = await self.visual_service.capture_context()
+    async def generate_plan(self, prompt: str):
+        from ..design.models import DesignPlan
+        system_prompt = (
+            "You are an expert UX/UI designer planning a website redesign. "
+            "Given the user's prompt, create a comprehensive DesignPlan matching the requested schema. "
+            "Detail the specific changes (REMOVE, RESTYLE, ADD, MOVE) that need to be made."
+        )
+        user_prompt = f"User Request: {prompt}\n\nPlease generate the DesignPlan."
         
-        # Step 2: Design
-        design_plan = await self.design_planner.generate_plan(prompt, initial_visual)
-        return design_plan
+        return await self.transformation_planner.provider.generate_structured(
+            prompt=user_prompt,
+            schema=DesignPlan,
+            system_prompt=system_prompt,
+            temperature=0.7
+        )
 
-    async def apply_redesign(self, prompt: str, design_plan: DesignPlan) -> TransformTestResponse:
-        # Step 1: Goal Analysis
-        goal = await self.goal_analyzer.analyze(prompt)
+    async def apply_redesign(self, prompt: str, _deprecated_plan=None) -> TransformTestResponse:
+        # Phase 10 Execution Pipeline
         
-        # Capture Initial State again
+        # Capture Initial State
         initial_visual = await self.visual_service.capture_context()
         initial_dom = await self.inspection_service.inspect_compact()
         
-        # Step 3: Initial Transformation
-        preview = await self.transform_service.generate_preview(prompt, design_plan, initial_visual)
+        # 1. Fetch Knowledge Pack (Fallback)
+        print("2. Fetching Knowledge Pack...")
+        import urllib.parse
+        hostname = urllib.parse.urlparse(initial_visual.page_context.url).hostname
+        pack = self.knowledge_service.get_pack(hostname)
+        if not pack:
+            pack = self.knowledge_service.build_pack(hostname)
+            
+        # 10.0 Intent Interpreter
+        intent = await self.intent_interpreter.interpret(prompt)
         
-        # Iteration Loop
-        records = []
-        current_css = preview.transformation.css
-        current_js = preview.transformation.javascript
-        last_confidence = 0.0
-        
-        for i in range(1, self.max_iterations + 1):
-            # Apply current state
-            await self.transform_executor.apply_css(preview.transformation_id, current_css)
-            await self.transform_executor.apply_javascript(preview.transformation_id, current_js)
+        # 10.1 & 10.2 & 10.3 Core Planning
+        if intent.target_website:
+            print(f"Cross-Site Target Detected: {intent.target_website}")
+            target_hostname = self.domain_resolver.resolve(intent.target_website)
+            target_pack = self.knowledge_service.get_pack(target_hostname)
             
-            # Capture New State
-            new_visual = await self.visual_service.capture_context()
-            
-            # Evaluate
-            evaluation = await self.evaluator.evaluate(
-                prompt=prompt,
-                goal=goal,
-                before_screenshot_path=initial_visual.visual_context.screenshot_path,
-                after_screenshot_path=new_visual.visual_context.screenshot_path
-            )
-            
-            if evaluation.worked:
-                # Success!
-                records.append(IterationRecord(
-                    iteration=i,
-                    feedback=evaluation.feedback,
-                    selectors_found=[],
-                    patch_generated="",
-                    success=True
-                ))
-                break
-                
-            # Check improvement threshold
-            if i > 1 and (evaluation.confidence - last_confidence) < self.min_improvement:
-                # Diminishing returns, abort loop
-                break
-                
-            last_confidence = evaluation.confidence
-            
-            # Repair
-            grounded_candidates = await self.repair_service.repair_targets(evaluation.unresolved_targets)
-            
-            # Generate Patch
-            patch = await self.transform_service.generate_patch(
-                prompt=prompt,
-                design_plan=design_plan,
-                feedback=evaluation.feedback,
-                candidates=grounded_candidates,
-                current_css=current_css,
-                current_js=current_js
-            )
-            
-            # Append Patch
-            current_css += f"\n/* Patch Iteration {i} */\n{patch.css_patch}"
-            if patch.js_patch and patch.js_patch.strip():
-                current_js += f"\n/* Patch Iteration {i} */\n{{\n{patch.js_patch}\n}}"
-            
-            selectors_found = []
-            for target, cands in grounded_candidates.items():
-                if cands:
-                    selectors_found.append(cands[0].selector)
-                    
-            records.append(IterationRecord(
-                iteration=i,
-                feedback=evaluation.feedback,
-                selectors_found=selectors_found,
-                patch_generated=patch.css_patch,
-                success=False
-            ))
-            
-        # Determine status
-        status = "FAILED"
-        if records and records[-1].success:
-            status = "SUCCESS"
-        elif last_confidence > 0.4:
-            status = "PARTIAL"
-            
-        # Update preview with final aggregated code
-        preview.transformation.css = current_css
-        preview.transformation.javascript = current_js
-        
-        # We need final dom state for objective metrics
-        final_dom = await self.inspection_service.inspect_compact()
-
-        # Calculate dummy metrics for now or do actual count
-        objective_metrics = {
-            "dom_nodes_removed": len(initial_dom.sections) - len(final_dom.sections),
-            "dom_nodes_added": len(final_dom.sections) - len(initial_dom.sections) if len(final_dom.sections) > len(initial_dom.sections) else 0,
-            "dom_nodes_changed": len(preview.transformation.affected_elements)
-        }
-        
-        # Final evaluation fallback
-        final_feedback = records[-1].feedback if records else "No evaluation generated."
-
-        # Save to history if history service is available
-        from ..history.models import TransformationHistoryRecord
-        import uuid
-        
-        run_id = f"run_{uuid.uuid4().hex[:8]}"
-        
-        if hasattr(self, 'history_service') and self.history_service:
-            record = TransformationHistoryRecord(
-                run_id=run_id,
-                prompt=prompt,
-                site=initial_visual.page_context.url,
-                status=status,
-                reference_id=None, # Passed down if available, not currently in orchestrator args
-                design_plan=design_plan,
-                css=current_css,
-                javascript=current_js,
-                before_screenshot_path=initial_visual.visual_context.screenshot_path,
-                after_screenshot_path=new_visual.visual_context.screenshot_path if 'new_visual' in locals() else initial_visual.visual_context.screenshot_path,
-                objective_metrics=objective_metrics,
-                iterations=records,
-                diff_summary=final_feedback
-            )
-            self.history_service.save_record(record)
-            
-            before_screenshot_path = record.before_screenshot_path
-            after_screenshot_path = record.after_screenshot_path
-            reference_screenshot_path = record.reference_screenshot_path
+            if target_pack:
+                print(f"Using Cross-Site Planner for {hostname} -> {target_hostname}")
+                delta = await self.cross_site_planner.plan(pack, target_pack, intent)
+                impact_analysis = None
+            else:
+                print(f"Target Pack {target_hostname} not found. Falling back to Standard Planner.")
+                if pack:
+                    context = await self.graph_query_engine.query(intent, pack)
+                else:
+                    from ..knowledge.query import FilteredContext
+                    context = FilteredContext(concepts=[])
+                impact_analysis = await self.impact_analyzer.analyze(intent, context)
+                delta = await self.transformation_planner.plan(impact_analysis)
         else:
-            before_screenshot_path = initial_visual.visual_context.screenshot_path
-            after_screenshot_path = new_visual.visual_context.screenshot_path if 'new_visual' in locals() else initial_visual.visual_context.screenshot_path
-            reference_screenshot_path = None
+            if pack:
+                context = await self.graph_query_engine.query(intent, pack)
+            else:
+                from ..knowledge.query import FilteredContext
+                context = FilteredContext(concepts=[])
+                
+            impact_analysis = await self.impact_analyzer.analyze(intent, context)
+            delta = await self.transformation_planner.plan(impact_analysis)
         
+        # Trace
+        trace = PipelineTrace(
+            intent=intent,
+            impact_analysis=impact_analysis,
+            transformation_delta=delta
+        )
+        
+        # 10.4 Engineer
+        preview = await self.css_js_engineer.generate_preview(prompt, delta, pack)
+        
+        # Apply the transformation directly
+        await self.transform_executor.apply_css(preview.transformation_id, preview.transformation.css)
+        await self.transform_executor.apply_javascript(preview.transformation_id, preview.transformation.javascript)
+        
+        # Save to registry for persistence
+        if hasattr(self.browser, "transformation_manager"):
+            from ..transform.models import SavedTransformation
+            self.browser.transformation_manager.save_transformation(SavedTransformation(
+                id=preview.transformation_id,
+                hostname=hostname,
+                css=preview.transformation.css,
+                javascript=preview.transformation.javascript,
+                enabled=True
+            ))
+        
+        # The frontend expects a specific TransformExecutionResult
         execution = TransformExecutionResult(
             transformation_id=preview.transformation_id,
-            success=status == "SUCCESS",
+            success=True,
             applied_css=True,
             applied_javascript=True,
-            message=f"Redesign completed after {len(records)} iterations. Status: {status}",
-            before_screenshot_path=f"/data/history/{run_id}/before.png" if self.history_service else f"/{before_screenshot_path}",
-            after_screenshot_path=f"/data/history/{run_id}/after.png" if self.history_service else f"/{after_screenshot_path}",
-            reference_screenshot_path=f"/data/history/{run_id}/reference.png" if self.history_service and reference_screenshot_path else None,
-            objective_metrics=objective_metrics,
-            diff_summary=final_feedback
+            message="Phase 10 executed successfully.",
+            before_screenshot_path="",
+            after_screenshot_path="",
+            objective_metrics={},
+            diff_summary="Applied operations: " + ", ".join([op.operation for op in delta.operations])
         )
         
         return TransformTestResponse(
             preview=preview,
-            execution=execution
+            execution=execution,
+            trace=trace
         )
