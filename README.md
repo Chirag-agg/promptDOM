@@ -1,169 +1,62 @@
-# PromptDOM
+# PromptDOM Studio
 
-A local-first FastAPI application that connects to an already running Chrome browser through the Chrome DevTools Protocol (CDP), receives natural language requests, converts them into structured actions, and executes those actions on the currently active tab.
+PromptDOM is a local-first platform designed to instantly restructure and redesign any live website using natural language. 
 
-## Features
+By capturing a page's DOM, building a structural **Knowledge Graph**, and employing a multi-stage LLM reasoning pipeline, PromptDOM translates high-level aesthetic intent into robust, deterministic frontend CSS/JS code.
 
-- Connect to existing Chrome instance via CDP (no browser extension needed)
-- Natural language parsing for browser actions
-- Supported actions: hide, show, highlight
-- Supported targets: YouTube Shorts, comments, sidebar
-- Local-only execution - no cloud services or authentication required
+## Phase 10 Architecture
 
-## Project Structure
+PromptDOM operates on a completely decoupled **Multi-Stage Execution Pipeline**:
 
-```
-promptdom/
-├── promptdom/
-│   ├── __init__.py
-│   ├── main.py
-│   ├── browser.py
-│   ├── planner.py
-│   ├── runtime.py
-│   ├── features.py
-│   └── models.py
-├── tests/
-│   ├── __init__.py
-│   └── test_planner.py
-├── pyproject.toml
-├── .gitignore
-├── LICENSE
-└── README.md
-```
+1. **Intent Interpreter**: Extracts pure design principles from the user's prompt (e.g., "reduce visual noise") without attempting to guess website structure.
+2. **Site Context Builder**: Queries the local Knowledge Graph to extract only the concepts relevant to the design intent, preventing the downstream planner from drowning in context.
+3. **Impact Analyzer**: Strategically determines how each logical concept should be treated (e.g., `REMOVE Shorts`, `DEEMPHASIZE Sidebar`).
+4. **Transformation Planner**: Generates a structural, DOM-agnostic transformation delta consisting of concrete operations.
+5. **CSS/JS Engineer**: Receives exact, verified CSS selectors from the Knowledge Graph for the requested concepts and engineers the final CSS/JS code, injecting it live into the browser.
 
-## How to Launch Chrome with Remote Debugging
+## Getting Started
 
-Before running PromptDOM, you need to launch Chrome with remote debugging enabled:
+### Prerequisites
+- Python 3.10+
+- Node.js 18+
+- Chrome Browser
 
-### Windows
+### 1. Start the Chrome Debugger
+To allow PromptDOM to interact with your live browser, you must start Chrome with remote debugging enabled.
 ```bash
-chrome.exe --remote-debugging-port=9222
+# Windows
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
+
+# macOS
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
 ```
 
-### macOS
+### 2. Start the Backend
 ```bash
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222
+python -m venv .venv
+source .venv/Scripts/activate  # Or .venv/bin/activate on macOS/Linux
+pip install -r requirements.txt
+
+# Create a .env file with your LLM provider credentials
+# GROQ_API_KEY=...
+# OPENAI_API_KEY=...
+
+# Run the server
+python run_server.py
 ```
 
-### Linux
+### 3. Start PromptDOM Studio (Frontend)
 ```bash
-google-chrome --remote-debugging-port=9222
+cd frontend
+npm install
+npm run dev
 ```
 
-**Note**: Make sure Chrome is not already running, or close all Chrome instances before launching with the debug flag.
+Navigate to `http://localhost:5173` to access PromptDOM Studio.
 
-## Installation
+## Using PromptDOM Studio
 
-1. Clone or create the project directory
-2. Install dependencies:
-   ```bash
-   pip install -e .
-   ```
-
-3. Install Playwright browsers (optional, as we connect to existing Chrome):
-   ```bash
-   playwright install
-   ```
-
-## How to Run
-
-```bash
-uvicorn promptdom.main:app --reload
-```
-
-The API will be available at http://localhost:8000
-
-## API Endpoints
-
-### POST /execute
-Execute a natural language prompt on the active browser tab.
-
-**Request:**
-```json
-{
-  "prompt": "Hide YouTube Shorts"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "action": {
-    "action": "hide",
-    "target": "youtube_shorts"
-  },
-  "message": "Successfully executed hide on youtube_shorts"
-}
-```
-
-### Example curl requests
-
-Hide YouTube Shorts:
-```bash
-curl -X POST "http://localhost:8000/execute" \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "Hide YouTube Shorts"}'
-```
-
-Show comments:
-```bash
-curl -X POST "http://localhost:8000/execute" \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "Show comments"}'
-```
-
-Highlight sidebar:
-```bash
-curl -X POST "http://localhost:8000/execute" \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "Highlight sidebar"}'
-```
-
-## Supported Actions and Targets
-
-### Actions
-- `hide`: Hide elements using `display: none`
-- `show`: Show hidden elements
-- `highlight`: Add yellow border highlight to elements
-
-### Targets
-- `youtube_shorts`: Targets YouTube Shorts shelf (`ytd-reel-shelf-renderer`)
-- `comments`: Targets comments section (`#comments`)
-- `sidebar`: Targets sidebar (`#secondary`)
-
-## How It Works
-
-1. **Natural Language Parsing**: The planner converts prompts like "Hide YouTube Shorts" into structured JSON `{action: "hide", "target": "youtube_shorts"}`
-2. **Feature Registry**: Maps targets to CSS selectors
-3. **Runtime Engine**: Generates appropriate JavaScript for each action/target combination
-4. **Browser Manager**: Connects to Chrome via CDP and executes JavaScript on the active tab
-
-## Implementation Details
-
-- **promptdom/browser.py**: Handles Chrome DevTools Protocol connection using Playwright
-- **promptdom/planner.py**: Rule-based natural language parser (no LLM used)
-- **promptdom/features.py**: Registry of target features and their CSS selectors
-- **promptdom/runtime.py**: Generates safe, scoped JavaScript for DOM manipulation
-- **promptdom/main.py**: FastAPI application with `/execute` endpoint
-- **promptdom/models.py**: Pydantic models for request/response validation
-
-## Requirements
-
-- Python 3.12+
-- Google Chrome (for CDP connection)
-- Internet connection (only for initial dependency installation)
-
-## Security Notes
-
-- Only connects to locally running Chrome instance
-- No arbitrary JavaScript execution - all JS is generated internally
-- No data leaves your machine
-- No authentication or cloud dependencies
-
-## Troubleshooting
-
-If you get connection errors:
-1. Ensure Chrome is running with `--remote-debugging-port=9222`
-2. Check that no firewall is blocking port 9222
-3. Verify you're using the correct Chrome executable path for your OS
+1. Open the website you wish to redesign in your Chrome debugger window.
+2. In PromptDOM Studio, type your intent in the prompt box (e.g., "Make this site more minimalistic").
+3. Click **Execute Redesign**.
+4. Use the **Debugger** panel to trace the pipeline's exact reasoning step-by-step (Intent -> Impact Analysis -> Operations).

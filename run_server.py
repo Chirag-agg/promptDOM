@@ -7,11 +7,13 @@ if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 if __name__ == "__main__":
+    from dotenv import load_dotenv
+    load_dotenv()
+    
     # Configure LLM Provider explicitly as requested
     os.environ["PROMPTDOM_LLM_PROVIDER"] = "NVIDIA"
-    
     # The Coder model (CSS/JS generation)
-    os.environ["PROMPTDOM_LLM_MODEL"] = "meta/llama-3.1-405b-instruct"
+    os.environ["PROMPTDOM_LLM_MODEL"] = "meta/llama-3.3-70b-instruct"
     
     # The Designer model (Requires Vision to see screenshots)
     os.environ["PROMPTDOM_LLM_DESIGNER_PROVIDER"] = "NVIDIA"
