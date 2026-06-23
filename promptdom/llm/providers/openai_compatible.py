@@ -148,8 +148,22 @@ class BaseOpenAICompatibleProvider(BaseLLMProvider):
         try:
             import json
             parsed = json.loads(content)
-            if "properties" in parsed and isinstance(parsed["properties"], dict) and len(parsed) == 1:
-                parsed = parsed["properties"]
+            
+            def _extract_schema_values(data):
+                if isinstance(data, dict):
+                    if "type" in data and ("value" in data or "default" in data):
+                        return data.get("value", data.get("default"))
+                    if "properties" in data and isinstance(data["properties"], dict):
+                        return _extract_schema_values(data["properties"])
+                    new_data = {}
+                    for k, v in data.items():
+                        new_data[k] = _extract_schema_values(v)
+                    return new_data
+                elif isinstance(data, list):
+                    return [_extract_schema_values(item) for item in data]
+                return data
+
+            parsed = _extract_schema_values(parsed)
             return schema.model_validate(parsed)
         except Exception as e:
             raise ProviderValidationError(f"Failed to parse provider output into schema: {str(e)}\nOutput: {content}")

@@ -8,7 +8,7 @@ class LLMSettings(BaseModel):
     designer_provider: Optional[str] = None
     designer_model: Optional[str] = None
     temperature: float = 0.0
-    timeout_seconds: int = 120
+    timeout_seconds: int = 600
     
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
@@ -23,7 +23,7 @@ def get_llm_settings() -> LLMSettings:
         model=os.getenv("PROMPTDOM_LLM_MODEL", "mock-1"),
         designer_provider=os.getenv("PROMPTDOM_LLM_DESIGNER_PROVIDER", "").upper() or None,
         designer_model=os.getenv("PROMPTDOM_LLM_DESIGNER_MODEL"),
-        timeout_seconds=int(os.getenv("PROMPTDOM_LLM_TIMEOUT", "120")),
+        timeout_seconds=int(os.getenv("PROMPTDOM_LLM_TIMEOUT", "600")),
         openai_api_key=os.getenv("PROMPTDOM_LLM_OPENAI_API_KEY"),
         anthropic_api_key=os.getenv("PROMPTDOM_LLM_ANTHROPIC_API_KEY"),
         nvidia_api_key=os.getenv("PROMPTDOM_LLM_NVIDIA_API_KEY"),
