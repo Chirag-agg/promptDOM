@@ -1,3 +1,0 @@
-"""
-Semantic Target Resolution Engine
-"""
