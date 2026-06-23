@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Any
+from pydantic import BaseModel, Field
+from typing import Any, Optional
 
 
 class Bounds(BaseModel):
@@ -32,12 +32,21 @@ class PageVariantKnowledge(BaseModel):
     frequency: float
 
 
+class VisualSignature(BaseModel):
+    theme: str = Field(description="e.g. 'dark', 'light', 'mixed'")
+    navigation: str = Field(description="e.g. 'top', 'sidebar', 'bottom'")
+    content_layout: str = Field(description="e.g. 'grid', 'horizontal_rows', 'masonry'")
+    card_style: str = Field(description="e.g. 'compact', 'large_cinematic', 'minimal'")
+    density: str = Field(description="e.g. 'low', 'medium', 'high'")
+
+
 class KnowledgePack(BaseModel):
     pack_id: str
 
     hostname: str
     archetype: str
     patterns: list[str]
+    visual_signature: Optional[VisualSignature] = None
 
     region_knowledge: list[RegionKnowledge]
     concept_knowledge: list[ConceptKnowledge]

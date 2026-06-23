@@ -12,18 +12,153 @@ from promptdom.knowledge_graph.builder import GraphBuilder
 from .models import KnowledgePack, RegionKnowledge, ConceptKnowledge, Bounds, PageVariantKnowledge
 
 
+STRUCTURAL_SIGNALS = {
+    "shorts": {
+        "selectors": ["ytd-reel-shelf-renderer", "#shorts-container"],
+        "id_patterns": ["shorts", "reel"],
+        "tag_patterns": ["ytd-reel-shelf-renderer"],
+    },
+    "sidebar": {
+        "selectors": ["#secondary", "ytd-watch-next-secondary-results-renderer"],
+        "id_patterns": ["secondary", "related"],
+        "tag_patterns": ["ytd-watch-next-secondary-results-renderer"],
+    },
+    "feed": {
+        "selectors": ["ytd-rich-grid-renderer", "#contents.ytd-rich-grid-renderer"],
+        "id_patterns": ["contents", "feed"],
+        "tag_patterns": ["ytd-rich-grid-renderer"],
+    },
+    "header": {
+        "selectors": ["#masthead", "ytd-masthead"],
+        "id_patterns": ["masthead", "header"],
+        "tag_patterns": ["ytd-masthead"],
+    },
+    "guide": {
+        "selectors": ["#guide", "ytd-guide-renderer", "ytd-mini-guide-renderer"],
+        "id_patterns": ["guide"],
+        "tag_patterns": ["ytd-guide-renderer", "ytd-mini-guide-renderer"],
+    },
+    "search": {
+        "selectors": ["yt-searchbox", "#search-form"],
+        "id_patterns": ["search"],
+        "tag_patterns": ["yt-searchbox"],
+    },
+    "chips_bar": {
+        "selectors": ["yt-chip-cloud-renderer", "#chips-wrapper"],
+        "id_patterns": ["chips"],
+        "tag_patterns": ["yt-chip-cloud-renderer"],
+    },
+    "video_player": {
+        "selectors": ["ytd-watch-flexy", "#player", "video.html5-main-video"],
+        "id_patterns": ["player", "movie_player"],
+        "tag_patterns": ["ytd-watch-flexy"],
+    },
+    "comments": {
+        "selectors": ["#comments", "ytd-comments"],
+        "id_patterns": ["comments"],
+        "tag_patterns": ["ytd-comments"],
+    },
+    "notifications": {
+        "selectors": ["ytd-notification-topbar-button-renderer"],
+        "id_patterns": ["notification"],
+        "tag_patterns": ["ytd-notification-topbar-button-renderer"],
+    },
+}
+
+
 class KnowledgeBuilder:
     def __init__(
         self,
         capture_storage: CaptureStorage,
         intelligence_service: IntelligenceService,
-        archetype_service: ArchetypeService
+        archetype_service: ArchetypeService,
+        provider=None
     ):
         self.capture_storage = capture_storage
         self.intelligence_service = intelligence_service
         self.archetype_service = archetype_service
+        self.provider = provider
 
-    def build(self, hostname: str) -> KnowledgePack | None:
+    def _extract_tags_and_ids(self, clean_dom: str) -> list[dict]:
+        """Parse clean DOM HTML and extract tag name, id, and classes for each element."""
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(clean_dom, "html.parser")
+        elements = []
+        for el in soup.find_all(True):  # all tags
+            elements.append({
+                "tag": el.name,
+                "id": el.get("id", ""),
+                "classes": el.get("class", []),
+            })
+        return elements
+
+    def _mine_structural_concepts(self, snapshots) -> list[ConceptKnowledge]:
+        """
+        Mine concepts from DOM structure, not text content.
+        Uses tag names, IDs, and class patterns — never aria_label or text.
+        """
+        concept_hits = defaultdict(list)  # concept_name -> list of confirmed selectors
+
+        for s in snapshots:
+            try:
+                with open(s.dom_path, "r", encoding="utf-8") as f:
+                    clean_dom_content = f.read()
+                dom_tags = self._extract_tags_and_ids(clean_dom_content)  # parse clean_dom for tags + ids
+            except Exception as e:
+                print(f"Failed to read DOM path {s.dom_path}: {e}")
+                continue
+
+            for concept_name, signals in STRUCTURAL_SIGNALS.items():
+                matched_selectors = []
+
+                for tag in dom_tags:
+                    tag_name = tag.get("tag", "").lower()
+                    tag_id = tag.get("id", "").lower()
+                    tag_classes = " ".join(tag.get("classes", []) if isinstance(tag.get("classes"), list) else tag.get("classes", "").split()).lower()
+
+                    # Match by custom element tag name
+                    for tp in signals["tag_patterns"]:
+                        if tag_name == tp.lower():
+                            matched_selectors.append(tp)
+                            break
+
+                    # Match by ID pattern
+                    for ip in signals["id_patterns"]:
+                        if ip in tag_id:
+                            matched_selectors.append(f"#{tag_id}")
+                            break
+
+                if matched_selectors:
+                    # Add the known canonical selectors too
+                    all_selectors = list(dict.fromkeys(
+                        signals["selectors"] + matched_selectors
+                    ))
+                    concept_hits[concept_name].append(all_selectors)
+
+        # Build ConceptKnowledge only for concepts found in >15% of snapshots
+        result = []
+        total = len(snapshots)
+        for concept_name, selector_lists in concept_hits.items():
+            freq = len(selector_lists) / total
+            if freq < 0.15:
+                continue
+
+            # Flatten and deduplicate selectors, most common first
+            all_sels = [s for sublist in selector_lists for s in sublist]
+            sel_counts = Counter(all_sels)
+            final_selectors = [s for s, _ in sel_counts.most_common(5)]
+
+            result.append(ConceptKnowledge(
+                concept=concept_name,
+                selectors=final_selectors,
+                semantic_signals=list(STRUCTURAL_SIGNALS[concept_name]["tag_patterns"]),
+                region_types=["STRUCTURE"],
+                frequency=round(freq, 2)
+            ))
+
+        return result
+
+    async def build(self, hostname: str) -> KnowledgePack | None:
         # 1. Fetch all snapshots
         all_snapshots = self.capture_storage.list_snapshots()
         snapshots = [s for s in all_snapshots if s.hostname == hostname or hostname in s.url]
@@ -62,24 +197,6 @@ class KnowledgeBuilder:
                 
             for r in web_model.regions:
                 region_instances[r.region_type].append(r)
-                
-            # Mine semantic concepts
-            for sem in s.semantic_elements:
-                text_val = (sem.aria_label or sem.text or "").strip().lower()
-                
-                # Noise reduction heuristics
-                if len(text_val) <= 2 or len(text_val) >= 20:
-                    continue
-                if re.search(r'\d', text_val):  # Ignore strings with numbers (times, views, dates)
-                    continue
-                if not re.search(r'[a-z]', text_val):  # Must contain letters
-                    continue
-                    
-                noise_words = {'views', 'ago', 'subscribers', 'likes', 'dislikes', 'months', 'years', 'days', 'hours'}
-                if set(text_val.split()).intersection(noise_words):
-                    continue
-                    
-                concept_instances[text_val].append((sem.selector, "UNKNOWN"))
 
         # Archetype & Patterns
         best_archetype = archetype_counts.most_common(1)[0][0] if archetype_counts else WebsiteArchetype.UNKNOWN
@@ -107,33 +224,8 @@ class KnowledgeBuilder:
                     confidence=round(avg_conf, 2)
                 ))
 
-        # Aggregated ConceptKnowledge
-        concept_knowledge = []
-        for concept_str, instances in concept_instances.items():
-            freq = len(instances) / total_snaps
-            if freq > 0.5:
-                sel_counts = Counter(sel for sel, rtype in instances)
-                common_sels = [s for s, c in sel_counts.most_common(3)]
-                
-                r_types = set()
-                for sel in common_sels:
-                    for rk in region_knowledge:
-                        if sel in rk.common_selectors or any(sel.startswith(rs) for rs in rk.common_selectors):
-                            r_types.add(rk.region_type)
-                
-                if not r_types:
-                    r_types.add("MAIN_CONTENT")
-                
-                concept_knowledge.append(ConceptKnowledge(
-                    concept=concept_str,
-                    selectors=common_sels,
-                    semantic_signals=[concept_str],
-                    region_types=list(r_types),
-                    frequency=round(freq, 2)
-                ))
-
-        concept_knowledge.sort(key=lambda x: x.frequency, reverse=True)
-        concept_knowledge = concept_knowledge[:20]
+        # Aggregated ConceptKnowledge using structural layers
+        concept_knowledge = self._mine_structural_concepts(snapshots)
 
         # Page Variants Knowledge
         page_variants = []
@@ -144,14 +236,17 @@ class KnowledgeBuilder:
             
             # which concepts are in these snaps?
             for ck in concept_knowledge:
-                c_matches = sum(1 for sel, rtype in concept_instances[ck.concept] if any(s.snapshot_id in str(concept_instances[ck.concept]) for s in v_snaps))
-                # simple approximation: if the concept appeared in at least 30% of this variant's snapshots
-                # Actually, a better way is to just assume if it's a global concept, does it ever appear in this variant?
+                # Since structural concepts are global components, we'll just check if their selectors exist in the DOMs
                 c_matches = 0
                 for s in v_snaps:
-                    if any((sem.aria_label or sem.text or "").strip().lower() == ck.concept for sem in s.semantic_elements):
-                        c_matches += 1
-                if c_matches / len(v_snaps) >= 0.3:
+                    try:
+                        with open(s.dom_path, "r", encoding="utf-8") as f:
+                            dom_content = f.read()
+                        if any(sel.strip("#.") in dom_content for sel in ck.selectors):
+                            c_matches += 1
+                    except:
+                        pass
+                if len(v_snaps) > 0 and c_matches / len(v_snaps) >= 0.3:
                     v_concepts.append(ck.concept)
 
             # which regions are in these snaps?
@@ -161,7 +256,7 @@ class KnowledgeBuilder:
                     wm = self.intelligence_service.analyze(s)
                     if any(r.region_type == rk.region_type for r in wm.regions):
                         r_matches += 1
-                if r_matches / len(v_snaps) >= 0.3:
+                if len(v_snaps) > 0 and r_matches / len(v_snaps) >= 0.3:
                     v_regions.append(rk.region_type)
             
             page_variants.append(PageVariantKnowledge(
@@ -179,11 +274,43 @@ class KnowledgeBuilder:
         # Generate Graph
         graph = GraphBuilder.build(region_knowledge, concept_knowledge, page_variants)
 
+        # Visual Signature Extraction
+        visual_signature = None
+        if self.provider and snapshots:
+            try:
+                system_prompt = (
+                    "You are an expert UX designer analyzing a website's visual signature. "
+                    "Extract the overarching theme, navigation style, content layout, card style, and visual density. "
+                    "Output JSON matching the schema."
+                )
+                from .models import VisualSignature
+                if getattr(self.provider.capabilities, 'supports_vision', False) and snapshots[0].screenshot_path:
+                    import base64
+                    with open(snapshots[0].screenshot_path, "rb") as f:
+                        img_b64 = base64.b64encode(f.read()).decode("utf-8")
+                    visual_signature = await self.provider.generate_multimodal_structured(
+                        prompt="Analyze this website's visual signature based on the provided screenshot.",
+                        images_base64=[img_b64],
+                        schema=VisualSignature,
+                        system_prompt=system_prompt,
+                        temperature=0.1
+                    )
+                else:
+                    visual_signature = await self.provider.generate_structured(
+                        prompt=f"Analyze the visual signature of {hostname} based on general knowledge.",
+                        schema=VisualSignature,
+                        system_prompt=system_prompt,
+                        temperature=0.1
+                    )
+            except Exception as e:
+                print(f"Failed to extract visual signature: {e}")
+
         pack = KnowledgePack(
             pack_id=str(uuid.uuid4()),
             hostname=hostname,
             archetype=best_archetype,
             patterns=final_patterns,
+            visual_signature=visual_signature,
             region_knowledge=region_knowledge,
             concept_knowledge=concept_knowledge,
             page_variants=page_variants,

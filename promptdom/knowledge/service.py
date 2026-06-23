@@ -11,13 +11,14 @@ class KnowledgeService:
         self,
         capture_storage: CaptureStorage,
         intelligence_service: IntelligenceService,
-        archetype_service: ArchetypeService
+        archetype_service: ArchetypeService,
+        provider=None
     ):
         self.storage = KnowledgeStorage()
-        self.builder = KnowledgeBuilder(capture_storage, intelligence_service, archetype_service)
+        self.builder = KnowledgeBuilder(capture_storage, intelligence_service, archetype_service, provider)
 
-    def build_pack(self, hostname: str) -> KnowledgePack | None:
-        pack = self.builder.build(hostname)
+    async def build_pack(self, hostname: str) -> KnowledgePack | None:
+        pack = await self.builder.build(hostname)
         if pack:
             self.storage.save(pack)
         return pack
