@@ -39,6 +39,59 @@ class BrowserManager:
         else:
             self.page = await self.context.new_page()
 
+        from .transform.registry import TransformationManager
+        self.transformation_manager = TransformationManager()
+
+        async def apply_saved_transformations(page: Page):
+            try:
+                url = page.url
+                if not url or url == "about:blank":
+                    return
+                from urllib.parse import urlparse
+                hostname = urlparse(url).hostname
+                if not hostname:
+                    return
+                
+                transformations = self.transformation_manager.get_transformations(hostname)
+                active_transformations = [t for t in transformations if t.enabled]
+                
+                for t in active_transformations:
+                    if t.css:
+                        css = t.css.replace("`", "\\`").replace("$", "\\$")
+                        script = f"""
+                        (() => {{
+                            const id = 'promptdom-transform-{t.id}';
+                            if (document.getElementById(id)) return;
+                            const style = document.createElement('style');
+                            style.id = id;
+                            style.setAttribute('data-promptdom-id', '{t.id}');
+                            style.textContent = `{css}`;
+                            document.head.appendChild(style);
+                        }})();
+                        """
+                        await page.evaluate(script)
+                    if t.javascript:
+                        js = t.javascript.replace("`", "\\`").replace("$", "\\$")
+                        script = f"""
+                        (() => {{
+                            try {{
+                                {js}
+                            }} catch (e) {{
+                                console.error('PromptDOM transformation error:', e);
+                            }}
+                        }})();
+                        """
+                        await page.evaluate(script)
+            except Exception as e:
+                print(f"Failed to apply saved transformations: {e}")
+
+        # Hook into existing pages
+        for p in self.context.pages:
+            p.on("domcontentloaded", apply_saved_transformations)
+            
+        # Hook into newly created pages
+        self.context.on("page", lambda p: p.on("domcontentloaded", apply_saved_transformations))
+
         self._initialized = True
 
     async def get_active_page(self) -> Page:
@@ -85,12 +138,21 @@ class BrowserManager:
 
     async def take_screenshot(self, full_page: bool = True) -> bytes:
         """Capture a screenshot of the active page"""
-        target_page = await self.get_active_page()
         try:
-            return await target_page.screenshot(full_page=full_page, animations="disabled", timeout=15000)
+            target_page = await self.get_active_page()
+            try:
+                return await target_page.screenshot(full_page=full_page, animations="disabled", timeout=15000)
+            except Exception as e:
+                print(f"Screenshot failed: {e}. Retrying with full_page=False...")
+                return await target_page.screenshot(full_page=False, animations="disabled", timeout=15000)
         except Exception as e:
-            print(f"Screenshot failed: {e}. Retrying with full_page=False...")
-            return await target_page.screenshot(full_page=False, animations="disabled", timeout=15000)
+            if "closed" in str(e).lower() or "disconnected" in str(e).lower():
+                print(f"Browser connection lost. Auto-reconnecting... ({e})")
+                self._initialized = False
+                await self.cleanup()
+                target_page = await self.get_active_page()
+                return await target_page.screenshot(full_page=False, animations="disabled", timeout=15000)
+            raise
 
     async def execute_js(self, script: str):
         """Execute JavaScript on the active page"""

@@ -130,8 +130,10 @@ _SEMANTIC_JS = """
     collect(document.querySelectorAll('input:not([type="button"]):not([type="submit"]), textarea, select'));
     // Headings
     collect(document.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+    // Media and Canvas
+    collect(document.querySelectorAll('video, iframe, audio, canvas'));
     // ARIA roles not already captured
-    collect(document.querySelectorAll('[role]:not(button):not(a):not(input):not(textarea):not(select):not(h1):not(h2):not(h3):not(h4):not(h5):not(h6)'));
+    collect(document.querySelectorAll('[role]:not(button):not(a):not(input):not(textarea):not(select):not(h1):not(h2):not(h3):not(h4):not(h5):not(h6):not(video):not(iframe):not(audio):not(canvas)'));
 
     return {
         url: window.location.href,
@@ -143,7 +145,7 @@ _SEMANTIC_JS = """
 
 _LAYOUT_JS = """
 () => {
-    const MAX = 500;
+    const MAX = 2500;
 
     const getCssPath = (el) => {
         if (!(el instanceof Element)) return '';
@@ -168,23 +170,31 @@ _LAYOUT_JS = """
         return path.join(' > ');
     };
 
-    const selector = 'button, a, input, textarea, select, ' +
-        'h1, h2, h3, h4, h5, h6, ' +
-        '[role="button"], [role="link"], [role="tab"], [role="menuitem"], ' +
-        'img, nav, header, footer, main, section, aside';
-
-    const nodes = document.querySelectorAll(selector);
+    const semanticSelector = 'button, a, input, textarea, select, h1, h2, h3, h4, h5, h6, [role], img, nav, header, footer, main, section, aside';
+    const nodes = document.querySelectorAll('*');
     const results = [];
     const seen = new Set();
 
     for (let i = 0; i < nodes.length && results.length < MAX; i++) {
         const el = nodes[i];
+        
+        // Exclude base structural elements from being captured as layout boxes themselves if they cover everything
+        if (el.tagName.toLowerCase() === 'html' || el.tagName.toLowerCase() === 'body') continue;
+        if (el.tagName.toLowerCase() === 'script' || el.tagName.toLowerCase() === 'style' || el.tagName.toLowerCase() === 'noscript' || el.tagName.toLowerCase() === 'svg') continue;
+
+        const visible = el.offsetWidth > 0 && el.offsetHeight > 0;
+        if (!visible) continue;
+        
+        const isSemantic = el.matches(semanticSelector);
+        if (!isSemantic) {
+            if (el.offsetWidth < 50 || el.offsetHeight < 20) continue;
+        }
+
         const path = getCssPath(el);
         if (!path || seen.has(path)) continue;
         seen.add(path);
 
         const rect = el.getBoundingClientRect();
-        const visible = el.offsetWidth > 0 && el.offsetHeight > 0;
 
         results.push({
             selector: path,
