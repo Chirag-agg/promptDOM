@@ -30,11 +30,11 @@ class ExperimentalTransformationService:
         context_str = f"Page URL: {inspection_data.url}\n"
         context_str += f"Page Title: {inspection_data.title}\n\n"
         context_str += "Sections:\n"
-        for section in inspection_data.sections[:10]: # Limit to avoid token overflow
+        for section in inspection_data.sections[:200]: # Increased limit for rich DOM context
             context_str += f"- {section.tag} (ID: {section.id}, Classes: {section.classes})\n"
         
         context_str += "\nButtons:\n"
-        for btn in inspection_data.buttons[:10]:
+        for btn in inspection_data.buttons[:200]:
             context_str += f"- Text: {btn.text} (ID: {btn.id}, Classes: {btn.classes})\n"
             
         context_str += "\nVisible Text Sample:\n"
@@ -133,5 +133,5 @@ class ExperimentalTransformationService:
             schema=TransformationPatch,
             system_prompt=system_prompt,
             temperature=0.2,
-            max_tokens=2000
+            max_tokens=4000
         )

@@ -50,12 +50,22 @@ class TransformExecutionResult(BaseModel):
     objective_metrics: Dict[str, Any] = Field(default_factory=dict)
     diff_summary: str = ""
 
+from ..intent.models import PipelineTrace
+
 class TransformTestResponse(BaseModel):
     preview: TransformationPreviewResponse
     execution: TransformExecutionResult
+    trace: Optional[PipelineTrace] = None
 
 class TransformFeedbackRequest(BaseModel):
     transformation_id: str
     worked: bool
     score: int
     notes: Optional[str] = None
+
+class SavedTransformation(BaseModel):
+    id: str
+    hostname: str
+    css: str
+    javascript: str
+    enabled: bool = True
