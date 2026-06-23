@@ -68,13 +68,13 @@ class WebsiteAnalyzer:
                 candidates[RegionType.FOOTER].append((layout, sem, ["Bottom 20% of page", "Wide (>80% viewport)"]))
 
             # Positional Sidebar: tall, narrow, left or right
-            if layout.height > viewport_height * 0.5 and viewport_width * 0.1 < layout.width < viewport_width * 0.35:
+            if layout.height > viewport_height * 0.5 and 40 < layout.width < viewport_width * 0.35:
                 if layout.x < viewport_width * 0.3 or layout.x > viewport_width * 0.7:
-                    candidates[RegionType.SIDEBAR].append((layout, sem, ["Tall (>50% viewport)", "Narrow (10-35% viewport)", "Left/Right aligned"]))
+                    candidates[RegionType.SIDEBAR].append((layout, sem, ["Tall (>50% viewport)", "Narrow", "Left/Right aligned"]))
 
             # Main Content fallback: large central area
             if area > viewport_width * viewport_height * 0.2 and layout.width > viewport_width * 0.4:
-                if layout.y > 50 and layout.x > 0:  # Not the absolute top-left
+                if layout.y >= 0:  # Allow x=0 since structural wrappers often touch the left edge
                     candidates[RegionType.MAIN_CONTENT].append((layout, sem, ["Large area (>20% viewport)", "Central positioning"]))
 
         # Resolve best candidates and deduplicate
