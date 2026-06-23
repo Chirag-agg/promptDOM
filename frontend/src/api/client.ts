@@ -65,8 +65,8 @@ export const studioApi = {
     apiClient.get(`/capture/${id}/health`),
   getCaptureExport: (id: string) =>
     apiClient.get(`/capture/${id}/export`),
-  analyzeSnapshot: (id: string) =>
-    apiClient.post(`/intelligence/${id}`, {}),
+  analyzeSnapshot: (id: string, force: boolean = false) =>
+    apiClient.post(`/intelligence/${id}?force=${force}`, {}),
   getArchetype: (id: string) =>
     apiClient.get(`/archetype/${id}`),
   buildKnowledgePack: (hostname: string) =>

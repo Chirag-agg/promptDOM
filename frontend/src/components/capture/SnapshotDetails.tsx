@@ -37,10 +37,10 @@ export function SnapshotDetails({ snapshot, onBack }: SnapshotDetailsProps) {
     }
   };
 
-  const handleAnalyze = async () => {
+  const handleAnalyze = async (force: boolean = false) => {
     setIsAnalyzing(true);
     try {
-      const data = await studioApi.analyzeSnapshot(snapshot.snapshot_id);
+      const data = await studioApi.analyzeSnapshot(snapshot.snapshot_id, force);
       setIntelligence(data);
     } catch (err) {
       console.error('Analysis failed:', err);
@@ -52,6 +52,8 @@ export function SnapshotDetails({ snapshot, onBack }: SnapshotDetailsProps) {
   useEffect(() => {
     studioApi.getCaptureSummary(snapshot.snapshot_id).then(setSummary).catch(console.error);
     studioApi.getCaptureHealth(snapshot.snapshot_id).then(setHealth).catch(console.error);
+    handleAnalyze();
+    handleDetectArchetype();
   }, [snapshot.snapshot_id]);
 
   const loadDom = async () => {
@@ -232,7 +234,7 @@ export function SnapshotDetails({ snapshot, onBack }: SnapshotDetailsProps) {
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-400">Detected Regions ({intelligence.regions.length})</span>
                 <button
-                  onClick={handleAnalyze}
+                  onClick={() => handleAnalyze(true)}
                   disabled={isAnalyzing}
                   className="text-xs text-pink-400 hover:text-pink-300 flex items-center space-x-1"
                 >

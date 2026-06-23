@@ -33,19 +33,21 @@ export function DebugPanel({ state }: { state: StudioState }) {
 
         {result && (
           <>
-            <Accordion title="Goal Analysis" defaultOpen={false}>
-              <pre className="mono text-xs text-green-400 bg-slate-900 p-3 rounded-b-lg border-x border-b border-slate-800 overflow-x-auto">
-{JSON.stringify({
-  primary_goal: "RESTYLE",
-  secondary_goals: ["LAYOUT_CHANGE"],
-  reasoning: result.preview?.design_plan?.reasoning || "Derived from prompt."
-}, null, 2)}
+            <Accordion title="Design Intent" defaultOpen={false}>
+              <pre className="mono text-xs text-green-400 bg-slate-900 p-3 rounded-b-lg border-x border-b border-slate-800 overflow-x-auto whitespace-pre-wrap break-words">
+{JSON.stringify(result.trace?.intent || { status: "No Intent Available" }, null, 2)}
               </pre>
             </Accordion>
 
-            <Accordion title="Design Plan" defaultOpen={true}>
-              <pre className="mono text-xs text-blue-400 bg-slate-900 p-3 rounded-b-lg border-x border-b border-slate-800 overflow-x-auto">
-{JSON.stringify(result.preview?.design_plan || {}, null, 2)}
+            <Accordion title="Impact Analysis" defaultOpen={false}>
+              <pre className="mono text-xs text-blue-400 bg-slate-900 p-3 rounded-b-lg border-x border-b border-slate-800 overflow-x-auto whitespace-pre-wrap break-words">
+{JSON.stringify(result.trace?.impact_analysis || { status: "No Impact Analysis" }, null, 2)}
+              </pre>
+            </Accordion>
+
+            <Accordion title="Transformation Operations" defaultOpen={true}>
+              <pre className="mono text-xs text-indigo-400 bg-slate-900 p-3 rounded-b-lg border-x border-b border-slate-800 overflow-x-auto whitespace-pre-wrap break-words">
+{JSON.stringify(result.trace?.transformation_delta || { status: "No Operations Generated" }, null, 2)}
               </pre>
             </Accordion>
 

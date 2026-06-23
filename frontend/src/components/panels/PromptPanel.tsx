@@ -39,8 +39,10 @@ export function PromptPanel({
   useEffect(() => {
     if (result?.execution && !state.isProcessing) {
       setActiveTab('diff');
+    } else if (designPlan && !state.isProcessing && !result?.execution) {
+      setActiveTab('design');
     }
-  }, [result?.execution, state.isProcessing]);
+  }, [result?.execution, designPlan, state.isProcessing]);
 
   // Mock critique and execution stats since backend doesn't return them directly yet
   const executionStats = result ? {
@@ -156,18 +158,17 @@ export function PromptPanel({
                 <button 
                   onClick={() => onGenerate(prompt)}
                   disabled={state.isProcessing || !prompt.trim()}
-                  className="flex items-center space-x-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 text-white px-6 py-2 rounded-lg font-medium transition-colors border border-slate-600"
+                  className="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-800 disabled:text-slate-500 disabled:border-slate-700 disabled:shadow-none text-slate-200 px-6 py-2 rounded-lg font-medium transition-colors border border-slate-600"
                 >
-                  <span>{state.isProcessing && !state.designPlan ? 'Thinking...' : 'Generate Plan'}</span>
-                  {state.isProcessing && !state.designPlan ? <Loader2 size={16} className="animate-spin" /> : null}
+                  <span>{state.isProcessing ? 'Planning...' : 'Generate Plan'}</span>
                 </button>
                 <button 
                   onClick={onApply}
-                  disabled={state.isProcessing || !state.designPlan}
+                  disabled={state.isProcessing || !prompt.trim()}
                   className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:border-slate-700 disabled:shadow-none text-white px-6 py-2 rounded-lg font-medium transition-colors shadow-lg shadow-blue-900/20 active:scale-95 border border-blue-500"
                 >
-                  <span>{state.isProcessing && state.designPlan ? 'Applying...' : 'Apply Redesign'}</span>
-                  {state.isProcessing && state.designPlan ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} fill="currentColor" />}
+                  <span>{state.isProcessing ? 'Executing Pipeline...' : 'Execute Redesign'}</span>
+                  {state.isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} fill="currentColor" />}
                 </button>
               </div>
             </div>

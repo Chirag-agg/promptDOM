@@ -19,7 +19,7 @@ export function AppLayout({ leftPanel, centerPanel, rightPanel }: AppLayoutProps
         <div className="flex items-center space-x-6 text-xs text-slate-400 mono">
           <div className="flex items-center space-x-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span>Connected: Ollama</span>
+            <span>Connected: NVIDIA</span>
           </div>
           <div className="flex items-center space-x-2">
             <span className="w-2 h-2 rounded-full bg-blue-500"></span>
